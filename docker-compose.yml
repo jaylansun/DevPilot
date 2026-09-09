@@ -1,0 +1,36 @@
+services:
+  db:
+    image: pgvector/pgvector:pg17
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-devpilot}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-devpilot}
+      POSTGRES_DB: ${POSTGRES_DB:-devpilot}
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-devpilot} -d ${POSTGRES_DB:-devpilot}"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  api:
+    build: ./backend
+    env_file: .env
+    depends_on:
+      db:
+        condition: service_healthy
+    ports:
+      - "8000:8000"
+
+  web:
+    build: ./frontend
+    depends_on:
+      - api
+    ports:
+      - "5173:80"
+
+volumes:
+  postgres_data:
+

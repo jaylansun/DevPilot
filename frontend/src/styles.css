@@ -1,0 +1,70 @@
+:root {
+  color: #172334;
+  background: #eaf1f6;
+  font-family: Inter, "PingFang SC", "Microsoft YaHei", sans-serif;
+  font-synthesis: none;
+}
+
+* { box-sizing: border-box; }
+
+body { margin: 0; min-width: 320px; min-height: 100vh; }
+
+button, input { font: inherit; }
+
+.landing-shell {
+  min-height: 100vh;
+  display: grid;
+  place-items: center;
+  padding: 28px;
+  background:
+    radial-gradient(circle at 15% 10%, rgba(43, 200, 176, .25), transparent 30rem),
+    radial-gradient(circle at 85% 90%, rgba(255, 189, 89, .18), transparent 26rem),
+    #eaf1f6;
+}
+
+.workspace-card {
+  width: min(900px, 100%);
+  padding: clamp(30px, 7vw, 68px);
+  border: 1px solid rgba(21, 47, 70, .12);
+  border-radius: 30px;
+  background: rgba(255, 255, 255, .88);
+  box-shadow: 0 32px 80px rgba(24, 52, 75, .15);
+}
+
+.brand-mark {
+  width: 48px;
+  height: 48px;
+  display: grid;
+  place-items: center;
+  border-radius: 15px;
+  color: #052f37;
+  background: #51d4bf;
+  font-size: 25px;
+}
+
+.eyebrow { margin: 30px 0 8px; color: #56808a; font-size: .78rem; font-weight: 800; letter-spacing: .12em; }
+h1 { margin: 0; color: #102335; font-size: clamp(2.6rem, 8vw, 5.5rem); letter-spacing: -.07em; line-height: .95; }
+.lead { max-width: 580px; margin: 20px 0 40px; color: #526677; font-size: 1.1rem; line-height: 1.8; }
+
+.milestone-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+.milestone-grid article { min-height: 172px; padding: 20px; border: 1px solid #dce7ed; border-radius: 18px; background: #f8fbfc; }
+.milestone-grid span { color: #139b8c; font-weight: 800; font-size: .85rem; }
+.milestone-grid h2 { margin: 28px 0 7px; color: #1a3044; font-size: 1rem; }
+.milestone-grid p { margin: 0; color: #6b7b89; font-size: .9rem; line-height: 1.6; }
+
+.api-check { margin-top: 36px; padding: 18px 20px; display: flex; gap: 20px; align-items: center; justify-content: space-between; border-radius: 16px; color: #cedce8; background: #102335; }
+.api-check p { margin: 5px 0 0; font-size: .92rem; }
+.check-title { display: flex; align-items: center; gap: 8px; color: #fff; font-weight: 750; }
+.success { display: flex; align-items: center; gap: 7px; color: #7ce8c8; }
+.failure { color: #ffbf8c; }
+footer { margin-top: 28px; color: #70808d; font-size: .88rem; }
+
+@media (max-width: 680px) {
+  .landing-shell { padding: 14px; }
+  .workspace-card { border-radius: 22px; }
+  .milestone-grid { grid-template-columns: 1fr; }
+  .milestone-grid article { min-height: 0; }
+  .milestone-grid h2 { margin-top: 14px; }
+  .api-check { align-items: stretch; flex-direction: column; }
+}
+

@@ -32,14 +32,20 @@ services:
       - "5173:80"
 
   jenkins:
-    image: jenkins/jenkins:lts-jdk21
+    build:
+      context: ./jenkins
+    image: devpilot-jenkins:lts-jdk21-docker
     profiles:
       - ci
     restart: unless-stopped
+    group_add:
+      - "${DOCKER_GID:-999}"
     ports:
       - "8080:8080"
     volumes:
       - jenkins_home:/var/jenkins_home
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./.env:/run/secrets/devpilot.env:ro
 
 volumes:
   postgres_data:

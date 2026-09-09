@@ -12,6 +12,7 @@ class Settings(BaseSettings):
     environment: str = "development"
     api_prefix: str = "/api/v1"
     ai_mode: str = "mock"
+    database_url: str
     frontend_origins: Annotated[list[str], NoDecode] = ["http://localhost:5173"]
 
     @field_validator("frontend_origins", mode="before")

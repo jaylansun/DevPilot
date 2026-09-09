@@ -1,0 +1,9 @@
+Alembic database migrations for DevPilot.
+
+Create a migration after changing SQLAlchemy models:
+
+    uv run alembic revision --autogenerate -m "describe_change"
+
+Apply all pending migrations:
+
+    uv run alembic upgrade head

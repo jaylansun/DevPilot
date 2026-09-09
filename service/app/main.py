@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
 from app.config import get_settings
+from app.database import close_database
 
 
 class HealthResponse(BaseModel):
@@ -20,8 +21,10 @@ settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    # Day 2 will initialize the PostgreSQL connection pool and migrations here.
-    yield
+    try:
+        yield
+    finally:
+        await close_database()
 
 
 app = FastAPI(
@@ -53,4 +56,3 @@ async def health_check() -> HealthResponse:
         timestamp=datetime.now(UTC),
         ai_mode=settings.ai_mode,
     )
-

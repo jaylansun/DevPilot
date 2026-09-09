@@ -1,2 +1,0 @@
-"""DevPilot FastAPI application."""
-

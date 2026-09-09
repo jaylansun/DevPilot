@@ -10,7 +10,7 @@ __pycache__/
 *.py[cod]
 *$py.class
 .venv/
-backend/.venv/
+service/.venv/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
@@ -20,8 +20,8 @@ htmlcov/
 
 # Node.js / Vue
 node_modules/
-frontend/node_modules/
-frontend/dist/
+vue/node_modules/
+vue/dist/
 *.tsbuildinfo
 
 # Frontend and end-to-end test output

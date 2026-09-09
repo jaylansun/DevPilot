@@ -16,7 +16,7 @@ services:
       retries: 20
 
   api:
-    build: ./backend
+    build: ./service
     env_file: .env
     depends_on:
       db:
@@ -25,12 +25,22 @@ services:
       - "8000:8000"
 
   web:
-    build: ./frontend
+    build: ./vue
     depends_on:
       - api
     ports:
       - "5173:80"
 
+  jenkins:
+    image: jenkins/jenkins:lts-jdk21
+    profiles:
+      - ci
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    volumes:
+      - jenkins_home:/var/jenkins_home
+
 volumes:
   postgres_data:
-
+  jenkins_home:

@@ -6,8 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.database import get_db_session
 from app.errors import ApiError
-from app.models.user import User, UserRole
-from app.repositories.user import get_user_by_id
+from app.models.user_do import UserDO, UserRole
+from app.repositories.user_repository import get_user_by_id
 from app.security import InvalidAccessTokenError, decode_access_token
 
 
@@ -34,7 +34,7 @@ def unauthorized_error() -> ApiError:
 async def get_current_user(
     credentials: BearerCredentials,
     session: DatabaseSession,
-) -> User:
+) -> UserDO:
     if credentials is None or credentials.scheme.casefold() != "bearer":
         raise unauthorized_error()
 
@@ -50,7 +50,7 @@ async def get_current_user(
     return user
 
 
-CurrentUser = Annotated[User, Depends(get_current_user)]
+CurrentUser = Annotated[UserDO, Depends(get_current_user)]
 
 
 def require_roles(*allowed_roles: UserRole):
@@ -58,7 +58,7 @@ def require_roles(*allowed_roles: UserRole):
 
     allowed = frozenset(allowed_roles)
 
-    async def check_role(current_user: CurrentUser) -> User:
+    async def check_role(current_user: CurrentUser) -> UserDO:
         if current_user.role not in allowed:
             raise ApiError(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -71,6 +71,11 @@ def require_roles(*allowed_roles: UserRole):
 
 
 ReviewerUser = Annotated[
-    User,
+    UserDO,
     Depends(require_roles(UserRole.REVIEWER)),
+]
+
+MemberUser = Annotated[
+    UserDO,
+    Depends(require_roles(UserRole.MEMBER)),
 ]

@@ -3,20 +3,12 @@ from datetime import UTC, datetime
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
-
 from app.api.error_handlers import register_error_handlers
 from app.api.v1 import router as api_v1_router
 from app.config import get_settings
 from app.database import close_database
 from app.middleware import request_id_middleware
-
-
-class HealthResponse(BaseModel):
-    status: str
-    service: str
-    timestamp: datetime
-    ai_mode: str
+from app.schemas.system_vo import HealthVO
 
 
 settings = get_settings()
@@ -57,12 +49,12 @@ async def root() -> dict[str, str]:
 
 @app.get(
     f"{settings.api_prefix}/health",
-    response_model=HealthResponse,
+    response_model=HealthVO,
     tags=["系统"],
     summary="健康检查",
 )
-async def health_check() -> HealthResponse:
-    return HealthResponse(
+async def health_check() -> HealthVO:
+    return HealthVO(
         status="ok",
         service="devpilot-api",
         timestamp=datetime.now(UTC),

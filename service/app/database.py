@@ -35,11 +35,12 @@ AsyncSessionFactory = async_sessionmaker(
 
 
 async def get_db_session() -> AsyncIterator[AsyncSession]:
-    """为一次 FastAPI 请求提供支持事务的数据库会话。"""
+    """为一次 FastAPI 请求提供自动提交或回滚的事务会话。"""
 
     async with AsyncSessionFactory() as session:
         try:
-            yield session
+            async with session.begin():
+                yield session
         except Exception:
             await session.rollback()
             raise

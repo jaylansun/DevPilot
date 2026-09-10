@@ -48,7 +48,19 @@ npm install
 npm run dev
 ```
 
-当前已经加入 Alembic 数据库迁移、用户模型、密码哈希、JWT 登录认证与 Jenkins 自动部署。
+当前已经完成实施计划第 1 至第 4 天的后端内容：Alembic 数据库迁移、用户认证、角色权限、项目与任务 CRUD、分页筛选、PATCH 版本控制、统一错误响应和 Jenkins 自动测试部署。
+
+## 预置账号
+
+项目不开放注册接口。通过容器内的管理命令创建成员或审批人账号，密码会隐藏输入：
+
+```bash
+sudo docker compose exec api \
+  python -m app.cli.create_user demo_member --role member
+
+sudo docker compose exec api \
+  python -m app.cli.create_user demo_reviewer --role reviewer
+```
 
 将已有用户设置为审批人：
 
@@ -56,3 +68,11 @@ npm run dev
 sudo docker compose exec api \
   python -m app.cli.set_user_role 用户名 reviewer
 ```
+
+## 当前后端接口
+
+- `POST /api/v1/auth/token`：登录并返回 Bearer JWT；
+- `GET /api/v1/me`：读取当前账号；
+- `/api/v1/projects`：创建、分页列表、详情、局部更新和删除项目；
+- `/api/v1/projects/{project_id}/tasks`：创建、筛选、分页、局部更新和删除任务；
+- `GET /api/v1/health`：服务健康检查。

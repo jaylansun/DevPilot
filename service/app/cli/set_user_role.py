@@ -2,8 +2,8 @@ import argparse
 import asyncio
 
 from app.database import AsyncSessionFactory, close_database
-from app.models.user import UserRole
-from app.repositories.user import get_user_by_username
+from app.models.user_do import UserRole
+from app.repositories.user_repository import get_user_by_username
 
 
 async def set_user_role(username: str, role: UserRole) -> bool:

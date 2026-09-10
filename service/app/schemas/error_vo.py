@@ -1,7 +1,7 @@
 from pydantic import BaseModel
 
 
-class ErrorDetail(BaseModel):
+class ErrorDetailVO(BaseModel):
     """统一错误详情。"""
 
     code: str
@@ -10,7 +10,7 @@ class ErrorDetail(BaseModel):
     details: object | None = None
 
 
-class ErrorResponse(BaseModel):
+class ErrorVO(BaseModel):
     """统一错误响应。"""
 
-    error: ErrorDetail
+    error: ErrorDetailVO

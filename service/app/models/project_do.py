@@ -1,45 +1,37 @@
 from datetime import datetime
-from enum import StrEnum
 from uuid import UUID, uuid4
 
-from sqlalchemy import DateTime, Enum, String, func
+from sqlalchemy import DateTime, ForeignKey, String, Text, UniqueConstraint, func
 from sqlalchemy.dialects.postgresql import UUID as PostgreSQLUUID
 from sqlalchemy.orm import Mapped, mapped_column
 
 from app.database import Base
 
 
-class UserRole(StrEnum):
-    MEMBER = "member"
-    REVIEWER = "reviewer"
+class ProjectDO(Base):
+    """由成员创建并拥有的项目。"""
 
-
-class User(Base):
-    __tablename__ = "users"
+    __tablename__ = "projects"
+    __table_args__ = (
+        UniqueConstraint("owner_id", "name", name="uq_projects_owner_name"),
+    )
 
     id: Mapped[UUID] = mapped_column(
         PostgreSQLUUID(as_uuid=True),
         primary_key=True,
         default=uuid4,
     )
-    username: Mapped[str] = mapped_column(
-        String(64),
-        unique=True,
+    owner_id: Mapped[UUID] = mapped_column(
+        PostgreSQLUUID(as_uuid=True),
+        ForeignKey("users.id", ondelete="CASCADE"),
         index=True,
         nullable=False,
     )
-    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
-    role: Mapped[UserRole] = mapped_column(
-        Enum(
-            UserRole,
-            name="user_role",
-            native_enum=False,
-            create_constraint=True,
-            validate_strings=True,
-            values_callable=lambda enum_type: [role.value for role in enum_type],
-        ),
-        default=UserRole.MEMBER,
-        server_default=UserRole.MEMBER.value,
+    name: Mapped[str] = mapped_column(String(120), nullable=False)
+    description: Mapped[str] = mapped_column(
+        Text,
+        default="",
+        server_default="",
         nullable=False,
     )
     created_at: Mapped[datetime] = mapped_column(

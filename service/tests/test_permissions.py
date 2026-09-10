@@ -2,12 +2,12 @@ import pytest
 
 from app.api.dependencies import require_roles
 from app.errors import ApiError
-from app.models.user import User, UserRole
+from app.models.user_do import UserDO, UserRole
 
 
 @pytest.mark.asyncio
 async def test_reviewer_can_use_reviewer_dependency() -> None:
-    reviewer = User(
+    reviewer = UserDO(
         username="reviewer_test",
         password_hash="测试哈希",
         role=UserRole.REVIEWER,
@@ -19,7 +19,7 @@ async def test_reviewer_can_use_reviewer_dependency() -> None:
 
 @pytest.mark.asyncio
 async def test_member_is_rejected_by_reviewer_dependency() -> None:
-    member = User(
+    member = UserDO(
         username="member_test",
         password_hash="测试哈希",
         role=UserRole.MEMBER,

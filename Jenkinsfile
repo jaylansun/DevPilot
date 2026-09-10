@@ -27,8 +27,14 @@ pipeline {
 
         stage('Prepare Deployment Environment') {
             steps {
-                sh 'test -f /run/secrets/devpilot.env'
-                sh 'install -m 600 /run/secrets/devpilot.env .env'
+                withCredentials([
+                    file(
+                        credentialsId: 'devpilot-env-file',
+                        variable: 'DEVPILOT_ENV_FILE'
+                    )
+                ]) {
+                    sh 'install -m 600 "$DEVPILOT_ENV_FILE" .env'
+                }
             }
         }
 

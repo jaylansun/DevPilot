@@ -3,6 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.api.dependencies import CurrentUser
 from app.config import get_settings
 from app.database import get_db_session
 from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserResponse
@@ -13,6 +14,11 @@ from app.services.auth import UsernameAlreadyExistsError, authenticate_user, reg
 router = APIRouter(prefix="/auth", tags=["authentication"])
 settings = get_settings()
 DatabaseSession = Annotated[AsyncSession, Depends(get_db_session)]
+
+
+@router.get("/me", response_model=UserResponse)
+async def get_me(current_user: CurrentUser) -> UserResponse:
+    return UserResponse.model_validate(current_user)
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)

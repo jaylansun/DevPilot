@@ -5,6 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from app.api.v1 import router as api_v1_router
 from app.config import get_settings
 from app.database import close_database
 
@@ -41,6 +42,8 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PATCH", "DELETE"],
     allow_headers=["Content-Type", "Authorization", "X-Request-ID"],
 )
+
+app.include_router(api_v1_router, prefix=settings.api_prefix)
 
 
 @app.get("/", tags=["system"])

@@ -1,7 +1,7 @@
 from functools import lru_cache
 from typing import Annotated
 
-from pydantic import field_validator
+from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     api_prefix: str = "/api/v1"
     ai_mode: str = "mock"
     database_url: str
+    jwt_secret: SecretStr
+    jwt_access_token_expire_minutes: int = 30
     frontend_origins: Annotated[list[str], NoDecode] = ["http://localhost:5173"]
 
     @field_validator("frontend_origins", mode="before")

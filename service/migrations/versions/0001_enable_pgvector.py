@@ -1,8 +1,8 @@
-"""Enable the pgvector PostgreSQL extension.
+"""启用 PostgreSQL 的 pgvector 扩展。
 
-Revision ID: 0001_pgvector
-Revises:
-Create Date: 2026-09-09
+版本号: 0001_pgvector
+上一版本:
+创建时间: 2026-09-09
 """
 
 from collections.abc import Sequence
@@ -21,6 +21,5 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
-    # Keep the extension and its vector data during a downgrade. Removing it
-    # later is an explicit database-administration operation.
+    # 降级时保留扩展及其向量数据；如需删除，应由数据库管理员显式操作。
     pass

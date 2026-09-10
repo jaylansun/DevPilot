@@ -10,11 +10,11 @@ JWT_ALGORITHM = "HS256"
 
 
 class InvalidAccessTokenError(ValueError):
-    """Raised when an access token is malformed, altered, or expired."""
+    """访问令牌格式错误、被篡改或已过期时抛出。"""
 
 
 def create_access_token(user_id: UUID, expires_delta: timedelta | None = None) -> str:
-    """Create a signed, time-limited JWT for one user."""
+    """为指定用户创建带签名且具有有效期的 JWT。"""
 
     settings = get_settings()
     issued_at = datetime.now(UTC)
@@ -35,7 +35,7 @@ def create_access_token(user_id: UUID, expires_delta: timedelta | None = None) -
 
 
 def decode_access_token(token: str) -> UUID:
-    """Validate an access token and return its user ID."""
+    """验证访问令牌并返回其中的用户 ID。"""
 
     settings = get_settings()
     try:
@@ -45,12 +45,12 @@ def decode_access_token(token: str) -> UUID:
             algorithms=[JWT_ALGORITHM],
         )
         if payload.get("type") != "access":
-            raise ValueError("unexpected token type")
+            raise ValueError("令牌类型不正确")
 
         subject = payload.get("sub")
         if not isinstance(subject, str):
-            raise ValueError("missing token subject")
+            raise ValueError("令牌缺少用户标识")
 
         return UUID(subject)
     except (jwt.InvalidTokenError, TypeError, ValueError) as exc:
-        raise InvalidAccessTokenError("Invalid or expired access token") from exc
+        raise InvalidAccessTokenError("访问令牌无效或已过期") from exc

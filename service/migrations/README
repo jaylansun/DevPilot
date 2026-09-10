@@ -1,9 +1,9 @@
-Alembic database migrations for DevPilot.
+本目录保存 DevPilot 的 Alembic 数据库迁移。
 
-Create a migration after changing SQLAlchemy models:
+修改 SQLAlchemy 模型后，使用以下命令创建迁移：
 
-    uv run alembic revision --autogenerate -m "describe_change"
+    uv run alembic revision --autogenerate -m "描述本次变更"
 
-Apply all pending migrations:
+执行所有尚未应用的迁移：
 
     uv run alembic upgrade head

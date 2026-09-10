@@ -1,8 +1,8 @@
-"""Create the users table.
+"""创建用户表。
 
-Revision ID: 0002_users
-Revises: 0001_pgvector
-Create Date: 2026-09-10
+版本号: 0002_users
+上一版本: 0001_pgvector
+创建时间: 2026-09-10
 """
 
 from collections.abc import Sequence

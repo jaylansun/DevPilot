@@ -5,9 +5,11 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 
+from app.api.error_handlers import register_error_handlers
 from app.api.v1 import router as api_v1_router
 from app.config import get_settings
 from app.database import close_database
+from app.middleware import request_id_middleware
 
 
 class HealthResponse(BaseModel):
@@ -31,7 +33,7 @@ async def lifespan(_: FastAPI):
 app = FastAPI(
     title=settings.app_name,
     version="0.1.0",
-    description="AI 项目协作助手：第一天基础服务。",
+    description="基于 PostgreSQL 的 AI 项目协作助手。",
     lifespan=lifespan,
 )
 
@@ -42,16 +44,23 @@ app.add_middleware(
     allow_methods=["GET", "POST", "PATCH", "DELETE"],
     allow_headers=["Content-Type", "Authorization", "X-Request-ID"],
 )
+app.middleware("http")(request_id_middleware)
+register_error_handlers(app)
 
 app.include_router(api_v1_router, prefix=settings.api_prefix)
 
 
-@app.get("/", tags=["system"])
+@app.get("/", tags=["系统"], summary="服务入口")
 async def root() -> dict[str, str]:
     return {"name": "DevPilot API", "docs": "/docs", "health": f"{settings.api_prefix}/health"}
 
 
-@app.get(f"{settings.api_prefix}/health", response_model=HealthResponse, tags=["system"])
+@app.get(
+    f"{settings.api_prefix}/health",
+    response_model=HealthResponse,
+    tags=["系统"],
+    summary="健康检查",
+)
 async def health_check() -> HealthResponse:
     return HealthResponse(
         status="ok",

@@ -9,7 +9,7 @@ from app.security import hash_password, verify_password
 
 
 class UsernameAlreadyExistsError(ValueError):
-    """Raised when registration uses an existing username."""
+    """注册时用户名已经存在。"""
 
 
 async def register_user(session: AsyncSession, username: str, password: str) -> User:
@@ -18,14 +18,14 @@ async def register_user(session: AsyncSession, username: str, password: str) -> 
     try:
         async with session.begin():
             if await get_user_by_username(session, username) is not None:
-                raise UsernameAlreadyExistsError("Username already exists")
+                raise UsernameAlreadyExistsError("用户名已存在")
 
             user = User(username=username, password_hash=password_digest)
             session.add(user)
             await session.flush()
     except IntegrityError as exc:
-        # The database unique index protects against simultaneous registrations.
-        raise UsernameAlreadyExistsError("Username already exists") from exc
+        # 数据库唯一索引用于防止并发注册产生重复用户名。
+        raise UsernameAlreadyExistsError("用户名已存在") from exc
 
     return user
 

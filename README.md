@@ -48,4 +48,11 @@ npm install
 npm run dev
 ```
 
-第二天将加入 Alembic、PostgreSQL 数据模型、用户与项目的持久化接口。
+当前已经加入 Alembic 数据库迁移、用户模型、密码哈希、JWT 登录认证与 Jenkins 自动部署。
+
+将已有用户设置为审批人：
+
+```bash
+sudo docker compose exec api \
+  python -m app.cli.set_user_role 用户名 reviewer
+```

@@ -12,7 +12,7 @@ from app.config import get_settings
 
 
 class Base(DeclarativeBase):
-    """Base class shared by all SQLAlchemy models."""
+    """所有 SQLAlchemy 数据模型共用的基类。"""
 
 
 settings = get_settings()
@@ -35,7 +35,7 @@ AsyncSessionFactory = async_sessionmaker(
 
 
 async def get_db_session() -> AsyncIterator[AsyncSession]:
-    """Provide one transaction-capable session for a FastAPI request."""
+    """为一次 FastAPI 请求提供支持事务的数据库会话。"""
 
     async with AsyncSessionFactory() as session:
         try:
@@ -46,6 +46,6 @@ async def get_db_session() -> AsyncIterator[AsyncSession]:
 
 
 async def close_database() -> None:
-    """Release all pooled database connections during application shutdown."""
+    """应用关闭时释放连接池中的全部数据库连接。"""
 
     await engine.dispose()

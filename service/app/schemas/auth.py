@@ -8,7 +8,12 @@ from app.models.user import UserRole
 
 
 class UsernameRequest(BaseModel):
-    username: str = Field(min_length=3, max_length=64, pattern=r"^[a-z0-9_.-]+$")
+    username: str = Field(
+        min_length=3,
+        max_length=64,
+        pattern=r"^[a-z0-9_.-]+$",
+        description="登录用户名，只能包含小写字母、数字、下划线、点和短横线",
+    )
 
     @field_validator("username", mode="before")
     @classmethod
@@ -19,11 +24,19 @@ class UsernameRequest(BaseModel):
 
 
 class RegisterRequest(UsernameRequest):
-    password: str = Field(min_length=8, max_length=128)
+    password: str = Field(
+        min_length=8,
+        max_length=128,
+        description="登录密码，长度为 8 至 128 个字符",
+    )
 
 
 class LoginRequest(UsernameRequest):
-    password: str = Field(min_length=1, max_length=128)
+    password: str = Field(
+        min_length=1,
+        max_length=128,
+        description="登录密码",
+    )
 
 
 class UserResponse(BaseModel):

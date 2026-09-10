@@ -33,7 +33,7 @@ async function checkApi() {
   <main class="landing-shell">
     <section class="workspace-card" aria-labelledby="page-title">
       <div class="brand-mark" aria-hidden="true"><MagicStick /></div>
-      <p class="eyebrow">DAY 01 · FOUNDATION</p>
+      <p class="eyebrow">第 3 天 · 身份认证</p>
       <h1 id="page-title">DevPilot</h1>
       <p class="lead">面向项目文档、任务看板与人工审批的 AI 协作助手。</p>
 
@@ -71,9 +71,8 @@ async function checkApi() {
       </div>
 
       <footer>
-        下一步：接入 Alembic、PostgreSQL 数据模型和项目 CRUD。
+        当前进度：数据库迁移、用户注册、登录和 JWT 身份认证已经就绪。
       </footer>
     </section>
   </main>
 </template>
-

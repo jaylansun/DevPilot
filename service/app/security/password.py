@@ -5,12 +5,12 @@ _password_hasher = PasswordHash.recommended()
 
 
 def hash_password(password: str) -> str:
-    """Convert a plain-text password into an Argon2 hash for storage."""
+    """将明文密码转换为可安全存储的 Argon2 哈希。"""
 
     return _password_hasher.hash(password)
 
 
 def verify_password(password: str, password_hash: str) -> bool:
-    """Return whether a plain-text password matches a stored hash."""
+    """判断明文密码是否与数据库中的密码哈希匹配。"""
 
     return _password_hasher.verify(password, password_hash)

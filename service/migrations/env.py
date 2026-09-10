@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from app.config import get_settings
 from app.database import Base
-from app import models  # noqa: F401  # Import models so Alembic can inspect their metadata.
+from app import models  # noqa: F401  # 导入全部模型，供 Alembic 检查元数据。
 
 
 config = context.config
@@ -19,14 +19,14 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 settings = get_settings()
-# Alembic uses ConfigParser, where a literal percent sign must be escaped.
+# Alembic 使用 ConfigParser，数据库地址中的百分号必须转义。
 config.set_main_option("sqlalchemy.url", settings.database_url.replace("%", "%%"))
 
 target_metadata = Base.metadata
 
 
 def run_migrations_offline() -> None:
-    """Generate SQL without opening a database connection."""
+    """在不连接数据库的情况下生成迁移 SQL。"""
 
     context.configure(
         url=config.get_main_option("sqlalchemy.url"),
@@ -52,7 +52,7 @@ def do_run_migrations(connection: Connection) -> None:
 
 
 async def run_async_migrations() -> None:
-    """Run migrations through SQLAlchemy's asynchronous Psycopg engine."""
+    """通过 SQLAlchemy 的异步 Psycopg 引擎执行迁移。"""
 
     connectable = async_engine_from_config(
         config.get_section(config.config_ini_section, {}),

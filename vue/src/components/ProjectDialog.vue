@@ -54,17 +54,19 @@ async function save() {
     :model-value="modelValue"
     :title="project ? '编辑项目' : '新建项目'"
     width="560px"
-    class="project-dialog"
+    class="ui-dialog"
     :close-on-click-modal="false"
     :close-on-press-escape="!saving"
     :show-close="!saving"
     @update:model-value="emit('update:modelValue', $event)"
   >
-    <p class="dialog-description">给项目起个名字，写下你想完成的目标。</p>
+    <p class="mb-7 text-[13px] text-[#80919d]">
+      给项目起个名字，写下你想完成的目标。
+    </p>
     <form id="project-form" @submit.prevent="save">
-      <div class="form-field">
+      <div class="ui-field">
         <label for="project-name"
-          >项目名称 <span class="required">*</span></label
+          >项目名称 <span class="text-[#b75849]">*</span></label
         ><el-input
           id="project-name"
           v-model="form.name"
@@ -74,7 +76,7 @@ async function save() {
           :disabled="saving"
         />
       </div>
-      <div class="form-field">
+      <div class="ui-field">
         <label for="project-description">需求说明</label
         ><el-input
           id="project-description"
@@ -86,9 +88,9 @@ async function save() {
           placeholder="例如：顾客能查看菜单、点菜和付款，餐厅能查看并接收订单。"
           :disabled="saving"
         />
-        <p class="field-help">可以先写一个简单的想法，之后随时补充。</p>
+        <p class="ui-help">可以先写一个简单的想法，之后随时补充。</p>
       </div>
-      <p v-if="error" role="alert" class="inline-error">{{ error }}</p>
+      <p v-if="error" role="alert" class="ui-error">{{ error }}</p>
     </form>
     <template #footer
       ><el-button :disabled="saving" @click="emit('update:modelValue', false)"

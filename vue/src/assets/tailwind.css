@@ -1,0 +1,156 @@
+/* 样式层顺序：组件库在前，项目公共组件和工具类在后。保留现有基础行为，不引入 Preflight。 */
+@layer theme, base, element-plus, components, utilities;
+@import "tailwindcss/theme.css" layer(theme);
+@import "element-plus/dist/index.css" layer(element-plus);
+@import "tailwindcss/utilities.css" layer(utilities) source("../");
+
+@theme {
+  --font-sans: "Inter", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --color-brand: #087f73;
+  --color-ink: #1d3040;
+  --color-muted: #73818d;
+  --color-canvas: #f6f8fa;
+  --color-sidebar: #112f39;
+  --color-focus: #20aa98;
+  --breakpoint-*: initial;
+  --breakpoint-mobile: 680px;
+  --breakpoint-tablet: 850px;
+  --breakpoint-board: 1050px;
+  --breakpoint-desktop: 1150px;
+  --breakpoint-wide: 1550px;
+}
+
+@layer base {
+  :root {
+    @apply font-sans text-ink bg-canvas;
+    font-synthesis: none;
+  }
+  *,
+  ::before,
+  ::after {
+    box-sizing: border-box;
+  }
+  body {
+    @apply m-0 min-w-80;
+  }
+  a {
+    color: inherit;
+    text-decoration: none;
+  }
+  button,
+  input,
+  textarea,
+  select {
+    font: inherit;
+  }
+  button,
+  a {
+    -webkit-tap-highlight-color: transparent;
+  }
+  a:focus-visible,
+  button:focus-visible {
+    @apply outline-3 outline-focus outline-offset-4;
+  }
+  h1,
+  h2,
+  h3,
+  p {
+    margin-top: 0;
+  }
+  h1 {
+    @apply mb-2.5 text-[30px] leading-[1.4] tracking-[-0.03em] max-mobile:text-[26px];
+  }
+  h2 {
+    @apply text-lg font-[650];
+  }
+  svg {
+    @apply size-[1em];
+  }
+  @media (prefers-reduced-motion: reduce) {
+    *,
+    ::before,
+    ::after {
+      transition-duration: 0s !important;
+      animation-duration: 0s !important;
+      scroll-behavior: auto !important;
+    }
+  }
+}
+
+/* 只保留跨页面复用的模式与 Element Plus 适配；页面布局直接写在 Vue 模板中。 */
+@layer components {
+  :root {
+    --el-color-primary: var(--color-brand);
+    --el-color-primary-light-3: #45a59b;
+    --el-color-primary-light-5: #7bbdb6;
+    --el-color-primary-light-7: #b0d8d3;
+    --el-color-primary-light-8: #d0e8e4;
+    --el-color-primary-light-9: #eef7f5;
+    --el-color-primary-dark-2: #06645b;
+    --el-border-radius-base: 8px;
+    --el-text-color-primary: var(--color-ink);
+  }
+  .ui-muted {
+    @apply text-sm text-muted leading-[1.8];
+  }
+  .ui-eyebrow {
+    @apply mb-3 text-xs font-semibold tracking-[0.08em] text-brand;
+  }
+  .ui-page-heading {
+    @apply mb-7 flex items-center justify-between gap-6 max-mobile:flex-wrap max-mobile:items-start max-mobile:gap-[18px];
+  }
+  .ui-page-heading .ui-muted {
+    @apply mb-0 max-mobile:text-xs;
+  }
+  .ui-page-heading > .el-button {
+    @apply shrink-0;
+  }
+  .ui-panel {
+    @apply min-w-0 rounded-xl border border-[#e1e8ed] bg-white p-7;
+  }
+  .ui-dialog {
+    @apply max-w-[calc(100vw-32px)] rounded-[14px] p-[25px];
+  }
+  .ui-field {
+    @apply mb-[23px];
+  }
+  .ui-field > label {
+    @apply mb-2.5 block text-[13px] font-semibold text-[#334956];
+  }
+  .ui-field .el-input__wrapper {
+    @apply min-h-11;
+  }
+  .ui-field .el-textarea__inner {
+    @apply p-3 leading-[1.8];
+  }
+  .ui-help {
+    @apply mt-2.5 mb-0 text-xs leading-[1.8] text-[#8a98a0];
+  }
+  .ui-error {
+    @apply rounded-[7px] border border-[#f6d3cc] bg-[#fff2f0] px-[13px] py-[11px] text-[13px] leading-[1.6] text-[#a63e30];
+  }
+  .ui-select {
+    @apply min-h-10 rounded-lg border border-[#dce4e9] bg-white py-2.5 pl-3 pr-[30px] text-[13px] text-[#39515e] focus-visible:outline-2 focus-visible:outline-focus focus-visible:outline-offset-2 disabled:cursor-wait disabled:opacity-60;
+  }
+  .ui-empty {
+    @apply rounded-xl border border-dashed border-[#cfdce0] bg-white px-6 py-14 text-center max-mobile:px-[18px] max-mobile:py-10;
+  }
+  .ui-empty > h2 {
+    @apply mb-3 text-xl;
+  }
+  .ui-empty > p {
+    @apply mb-6 text-[13px] leading-[1.9] text-[#7f8e98];
+  }
+  .ui-empty > .ui-empty-example {
+    @apply mt-[23px] mb-0 text-[11px] text-[#95a1a9];
+  }
+  .ui-empty-icon {
+    @apply mx-auto mb-[25px] grid size-[74px] place-items-center rounded-[22px] border-[6px] border-[#f7fbf9] bg-[#eef6f3] text-[38px] text-[#378d7d];
+  }
+  .ui-state {
+    @apply rounded-xl border border-[#e2e9ee] bg-white px-6 py-12 text-center;
+  }
+  .ui-state > p {
+    @apply text-sm leading-[1.8] text-[#7d8a94];
+  }
+}

@@ -10,9 +10,8 @@ import {
   ElSkeleton,
 } from "element-plus";
 import { createPinia } from "pinia";
-import "element-plus/dist/index.css";
 import App from "./App.vue";
-import "./styles.css";
+import "./assets/tailwind.css";
 import { router } from "./router";
 import { useAuthStore } from "./stores/auth_store";
 import { configureAuth } from "./api/http_client";

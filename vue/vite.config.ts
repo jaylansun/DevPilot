@@ -10,8 +10,7 @@ export default defineConfig({
   server: {
     port: 5173,
     proxy: {
-      '/api': 'http://localhost:8000',
+      '/api': process.env.DEVPILOT_API_PROXY ?? 'http://localhost:8000',
     },
   },
 })
-

@@ -8,6 +8,8 @@ from app.api.dependencies import get_current_user
 from app.api.error_handlers import register_error_handlers
 from app.api.v1.project_controller import router as projects_router
 from app.api.v1.task_controller import router as tasks_router
+from app.api.v1.document_controller import router as documents_router
+from app.middleware.upload_limit_middleware import UploadLimitMiddleware
 from app.database import get_db_session
 from app.middleware import request_id_middleware
 from app.models.user_do import UserDO, UserRole
@@ -37,10 +39,12 @@ def reviewer_user() -> UserDO:
 def api_app_factory() -> Callable[[UserDO | None], FastAPI]:
     def create_app(current_user: UserDO | None) -> FastAPI:
         app = FastAPI()
+        app.add_middleware(UploadLimitMiddleware)
         app.middleware("http")(request_id_middleware)
         register_error_handlers(app)
         app.include_router(projects_router, prefix="/api/v1")
         app.include_router(tasks_router, prefix="/api/v1")
+        app.include_router(documents_router, prefix="/api/v1")
 
         async def override_database_session():
             yield object()
@@ -48,6 +52,7 @@ def api_app_factory() -> Callable[[UserDO | None], FastAPI]:
         app.dependency_overrides[get_db_session] = override_database_session
 
         if current_user is not None:
+
             async def override_current_user() -> UserDO:
                 return current_user
 

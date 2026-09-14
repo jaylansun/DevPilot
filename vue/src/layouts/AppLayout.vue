@@ -109,7 +109,9 @@ function signOut() {
           ><strong>{{
             route.name === "project" && route.query.tab === "tasks"
               ? "任务看板"
-              : route.meta.title
+              : route.name === "project" && route.query.tab === "documents"
+                ? "知识库"
+                : route.meta.title
           }}</strong>
         </div>
         <div

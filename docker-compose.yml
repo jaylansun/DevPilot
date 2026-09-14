@@ -18,6 +18,10 @@ services:
   api:
     build: ./service
     env_file: .env
+    environment:
+      KNOWLEDGE_DATA_DIR: /app/data
+    volumes:
+      - knowledge_data:/app/data
     depends_on:
       db:
         condition: service_healthy
@@ -49,3 +53,4 @@ services:
 volumes:
   postgres_data:
   jenkins_home:
+  knowledge_data:

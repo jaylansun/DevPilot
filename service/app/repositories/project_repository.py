@@ -10,13 +10,16 @@ async def get_owned_project(
     session: AsyncSession,
     project_id: UUID,
     owner_id: UUID,
+    *,
+    lock: bool = False,
 ) -> ProjectDO | None:
-    return await session.scalar(
-        select(ProjectDO).where(
-            ProjectDO.id == project_id,
-            ProjectDO.owner_id == owner_id,
-        )
+    query = select(ProjectDO).where(
+        ProjectDO.id == project_id,
+        ProjectDO.owner_id == owner_id,
     )
+    if lock:
+        query = query.with_for_update()
+    return await session.scalar(query)
 
 
 async def list_owned_projects(
@@ -28,10 +31,7 @@ async def list_owned_projects(
 ) -> tuple[list[ProjectDO], int]:
     condition = ProjectDO.owner_id == owner_id
     total = int(
-        await session.scalar(
-            select(func.count(ProjectDO.id)).where(condition)
-        )
-        or 0
+        await session.scalar(select(func.count(ProjectDO.id)).where(condition)) or 0
     )
     projects = list(
         await session.scalars(

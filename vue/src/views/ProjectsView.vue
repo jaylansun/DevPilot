@@ -70,7 +70,7 @@ async function removeProject(project: ProjectVO) {
   if (deletingId.value) return;
   try {
     await ElMessageBox.confirm(
-      `删除“${project.name}”后，项目及其任务将永久删除。`,
+      `删除“${project.name}”后，项目、任务和上传的文档将永久删除，对应向量会在后台清理。`,
       "删除项目",
       {
         confirmButtonText: "确认删除",

@@ -12,3 +12,6 @@ export type TaskUpdateQO = components["schemas"]["TaskUpdateQO"];
 export type TaskVO = components["schemas"]["TaskVO"];
 export type TaskPageVO = components["schemas"]["TaskPageVO"];
 export type TaskStatus = components["schemas"]["TaskStatus"];
+export type DocumentVO = components["schemas"]["DocumentVO"];
+export type DocumentListVO = components["schemas"]["DocumentListVO"];
+export type DocumentStatus = components["schemas"]["DocumentStatus"];

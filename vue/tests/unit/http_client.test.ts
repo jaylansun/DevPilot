@@ -10,6 +10,18 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe("统一请求客户端", () => {
+  it("上传文件直接发送 FormData，由浏览器生成 multipart 边界", async () => {
+    fetchMock.mockResolvedValue(
+      new Response(JSON.stringify({ status: "queued" }), { status: 202 }),
+    );
+    const body = new FormData();
+    body.append("file", new File(["需求正文"], "需求.md"));
+    await request("/projects/id/documents", { method: "POST", body });
+    const options = fetchMock.mock.calls[0]![1];
+    expect(options.body).toBe(body);
+    expect(options.headers.has("Content-Type")).toBe(false);
+    expect(options.headers.get("Authorization")).toBe("Bearer test-token");
+  });
   it("登录请求不携带旧令牌", async () => {
     fetchMock.mockResolvedValue(
       new Response(JSON.stringify({ access_token: "新令牌" })),

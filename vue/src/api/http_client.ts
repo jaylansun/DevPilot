@@ -32,6 +32,7 @@ const messages: Record<number, string> = {
   403: "当前账号没有执行此操作的权限",
   404: "请求的内容不存在或已被删除",
   409: "数据发生冲突，请刷新后重试",
+  413: "上传内容过大，请选择不超过 2 MB 的文件",
   422: "请检查输入内容",
   500: "服务暂时无法处理请求，请稍后重试",
   502: "后端服务暂时不可用，请稍后重试",
@@ -45,7 +46,8 @@ export async function request<T>(
   const token = options.token === undefined ? getToken() : options.token;
   const headers = new Headers({ Accept: "application/json" });
   if (token) headers.set("Authorization", `Bearer ${token}`);
-  if (options.body !== undefined)
+  const multipart = options.body instanceof FormData;
+  if (options.body !== undefined && !multipart)
     headers.set("Content-Type", "application/json");
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 20_000);
@@ -55,7 +57,11 @@ export async function request<T>(
       headers,
       credentials: "omit",
       body:
-        options.body === undefined ? undefined : JSON.stringify(options.body),
+        options.body === undefined
+          ? undefined
+          : multipart
+            ? (options.body as FormData)
+            : JSON.stringify(options.body),
       signal: controller.signal,
     });
     if (response.status === 204) return undefined as T;

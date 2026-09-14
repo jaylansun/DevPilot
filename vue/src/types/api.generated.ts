@@ -108,6 +108,58 @@ export interface paths {
     patch: operations["update_task_api_v1_projects__project_id__tasks__task_id__patch"];
     trace?: never;
   };
+  "/api/v1/projects/{project_id}/documents": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+
+    get: operations["list_documents_api_v1_projects__project_id__documents_get"];
+    put?: never;
+
+    post: operations["create_document_api_v1_projects__project_id__documents_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/projects/{project_id}/documents/{document_id}/retry": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+
+    post: operations["retry_document_api_v1_projects__project_id__documents__document_id__retry_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/projects/{project_id}/documents/{document_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+    post?: never;
+
+    delete: operations["delete_document_api_v1_projects__project_id__documents__document_id__delete"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/": {
     parameters: {
       query?: never;
@@ -146,6 +198,47 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+    Body_create_document_api_v1_projects__project_id__documents_post: {
+      file: string;
+    };
+
+    DocumentListVO: {
+      items: components["schemas"]["DocumentVO"][];
+
+      total: number;
+
+      max_documents: number;
+
+      max_size_bytes: number;
+    };
+
+    DocumentStatus:
+      | "queued"
+      | "indexing"
+      | "ready"
+      | "failed"
+      | "deleting"
+      | "delete_failed";
+
+    DocumentVO: {
+      id: string;
+
+      project_id: string;
+
+      filename: string;
+
+      size_bytes: number;
+      status: components["schemas"]["DocumentStatus"];
+
+      chunk_count: number;
+
+      error_message: string | null;
+
+      created_at: string;
+
+      updated_at: string;
+    };
+
     HTTPValidationError: {
       detail?: components["schemas"]["ValidationError"][];
     };
@@ -666,6 +759,132 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["TaskVO"];
+        };
+      };
+
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  list_documents_api_v1_projects__project_id__documents_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        project_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DocumentListVO"];
+        };
+      };
+
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  create_document_api_v1_projects__project_id__documents_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        project_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "multipart/form-data": components["schemas"]["Body_create_document_api_v1_projects__project_id__documents_post"];
+      };
+    };
+    responses: {
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DocumentVO"];
+        };
+      };
+
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  retry_document_api_v1_projects__project_id__documents__document_id__retry_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        project_id: string;
+        document_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DocumentVO"];
+        };
+      };
+
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  delete_document_api_v1_projects__project_id__documents__document_id__delete: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        project_id: string;
+        document_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      202: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["DocumentVO"];
         };
       };
 

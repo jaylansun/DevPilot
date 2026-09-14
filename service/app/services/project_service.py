@@ -4,6 +4,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models.project_do import ProjectDO
+from app.models.vector_cleanup_do import VectorCleanupDO
 from app.repositories.project_repository import get_owned_project, list_owned_projects
 
 
@@ -82,8 +83,10 @@ async def delete_project(
     owner_id: UUID,
     project_id: UUID,
 ) -> None:
-    project = await get_owned_project(session, project_id, owner_id)
+    project = await get_owned_project(session, project_id, owner_id, lock=True)
     if project is None:
         raise ProjectNotFoundError("项目不存在")
+    # 和项目删除放在同一事务中；即使进程此时退出，重启也不会遗漏向量清理。
+    session.add(VectorCleanupDO(project_id=project_id))
     await session.delete(project)
     await session.flush()

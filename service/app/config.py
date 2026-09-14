@@ -1,4 +1,5 @@
 from functools import lru_cache
+from pathlib import Path
 from typing import Annotated
 
 from pydantic import SecretStr, field_validator
@@ -12,6 +13,7 @@ class Settings(BaseSettings):
     environment: str = "development"
     api_prefix: str = "/api/v1"
     ai_mode: str = "mock"
+    knowledge_data_dir: Path = Path("data")
     database_url: str
     jwt_secret: SecretStr
     jwt_access_token_expire_minutes: int = 30

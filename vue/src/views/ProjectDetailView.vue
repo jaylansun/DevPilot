@@ -7,6 +7,7 @@ import { getProject } from "@/api/project_api";
 import { errorMessage } from "@/api/http_client";
 import ProjectDialog from "@/components/ProjectDialog.vue";
 import TaskBoard from "@/components/TaskBoard.vue";
+import DocumentLibrary from "@/components/DocumentLibrary.vue";
 import type { ProjectVO } from "@/types/api";
 
 const route = useRoute();
@@ -15,6 +16,7 @@ const loading = ref(true);
 const error = ref("");
 const editing = ref(false);
 const showingTasks = computed(() => route.query.tab === "tasks");
+const showingDocuments = computed(() => route.query.tab === "documents");
 
 async function loadProject() {
   loading.value = true;
@@ -60,7 +62,15 @@ onMounted(loadProject);
     <template v-else-if="project">
       <div class="ui-page-heading">
         <div>
-          <p class="ui-eyebrow">{{ showingTasks ? "任务看板" : "项目概览" }}</p>
+          <p class="ui-eyebrow">
+            {{
+              showingTasks
+                ? "任务看板"
+                : showingDocuments
+                  ? "知识库"
+                  : "项目概览"
+            }}
+          </p>
           <h1 class="wrap-anywhere">{{ project.name }}</h1>
           <p class="ui-muted">记录目标与需求，让项目的下一步更清晰。</p>
         </div>
@@ -74,11 +84,13 @@ onMounted(loadProject);
           :to="{ path: route.path }"
           class="border-b-2 px-[3px] pt-3 pb-4 text-sm"
           :class="
-            !showingTasks
+            !showingTasks && !showingDocuments
               ? 'border-brand text-brand font-semibold'
               : 'border-transparent text-[#7c8d98]'
           "
-          :aria-current="!showingTasks ? 'page' : undefined"
+          :aria-current="
+            !showingTasks && !showingDocuments ? 'page' : undefined
+          "
           >项目概览</RouterLink
         >
         <RouterLink
@@ -92,8 +104,20 @@ onMounted(loadProject);
           :aria-current="showingTasks ? 'page' : undefined"
           >任务看板</RouterLink
         >
+        <RouterLink
+          :to="{ path: route.path, query: { tab: 'documents' } }"
+          class="border-b-2 px-[3px] pt-3 pb-4 text-sm"
+          :class="
+            showingDocuments
+              ? 'border-brand text-brand font-semibold'
+              : 'border-transparent text-[#7c8d98]'
+          "
+          :aria-current="showingDocuments ? 'page' : undefined"
+          >知识库</RouterLink
+        >
       </nav>
       <TaskBoard v-if="showingTasks" :project-id="project.id" />
+      <DocumentLibrary v-else-if="showingDocuments" :project-id="project.id" />
       <div
         v-else
         class="grid grid-cols-[minmax(0,1fr)_265px] gap-6 max-tablet:grid-cols-1"

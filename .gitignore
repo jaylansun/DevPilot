@@ -40,3 +40,4 @@ Thumbs.db
 # Runtime files
 *.log
 logs/
+service/data/

@@ -194,6 +194,40 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/projects/{project_id}/planning": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+
+    get: operations["planning_info_api_v1_projects__project_id__planning_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/projects/{project_id}/planning/proposals": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+
+    post: operations["create_proposal_api_v1_projects__project_id__planning_proposals_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/": {
     parameters: {
       query?: never;
@@ -288,6 +322,43 @@ export interface components {
       password: string;
     };
 
+    PlanInfoVO: {
+      mode: "mock" | "live";
+
+      configured: boolean;
+
+      ready_documents: number;
+
+      task_count: number;
+    };
+
+    PlanProposalVO: {
+      summary: string;
+
+      assumptions: string[];
+
+      risks: string[];
+
+      tasks: components["schemas"]["TaskDraftVO"][];
+    };
+
+    PlanRequestQO: {
+      goal: string;
+    };
+
+    PlanResultVO: {
+      mode: "mock" | "live";
+      proposal: components["schemas"]["PlanProposalVO"];
+
+      sources: components["schemas"]["RagSourceVO"][];
+
+      tool_calls: components["schemas"]["ToolCallVO"][];
+
+      board_task_count: number;
+
+      persisted: false;
+    };
+
     ProjectCreateQO: {
       name: string;
 
@@ -372,6 +443,22 @@ export interface components {
       acceptance_criteria: string;
     };
 
+    TaskDraftVO: {
+      draft_id: string;
+
+      title: string;
+
+      description: string;
+
+      priority: number;
+
+      acceptance_criteria: string;
+
+      dependencies: string[];
+
+      source_ids: number[];
+    };
+
     TaskPageVO: {
       items: components["schemas"]["TaskVO"][];
 
@@ -428,6 +515,14 @@ export interface components {
 
       expires_in: number;
       user: components["schemas"]["UserVO"];
+    };
+
+    ToolCallVO: {
+      name: "search_documents" | "read_task_board";
+
+      status: "success" | "empty";
+
+      item_count: number;
     };
 
     UserRole: "member" | "reviewer";
@@ -1014,6 +1109,70 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["RagAnswerVO"];
+        };
+      };
+
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  planning_info_api_v1_projects__project_id__planning_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        project_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PlanInfoVO"];
+        };
+      };
+
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  create_proposal_api_v1_projects__project_id__planning_proposals_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        project_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PlanRequestQO"];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PlanResultVO"];
         };
       };
 

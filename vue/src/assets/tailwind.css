@@ -2,23 +2,25 @@
 @layer theme, base, element-plus, components, utilities;
 @import "tailwindcss/theme.css" layer(theme);
 @import "element-plus/dist/index.css" layer(element-plus);
-@import "element-plus/theme-chalk/dark/css-vars.css" layer(element-plus);
 @import "tailwindcss/utilities.css" layer(utilities) source("../");
 
 @theme {
-  --font-sans: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", sans-serif;
-  --color-brand: #8ccfff;
-  --color-ink: #edf3fc;
-  --color-muted: #a8b6ca;
-  --color-canvas: #0b1019;
-  --color-sidebar: #0c121d;
-  --color-surface: #141c2a;
-  --color-raised: #1c2738;
-  --color-line: #34445b;
-  --color-focus: #8ccfff;
-  --color-danger: #ffb5ae;
-  --color-success: #8bdfbc;
-  --color-warning: #f0cd8c;
+  --font-sans: "Inter", "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+  --color-brand: #365eea;
+  --color-ink: #202936;
+  --color-muted: #637086;
+  --color-canvas: #f7f8fa;
+  --color-sidebar: #f8f9fc;
+  --color-surface: #ffffff;
+  --color-raised: #eef2f8;
+  --color-line: #e4e8ef;
+  --color-focus: #365eea;
+  --color-danger: #ba344c;
+  --color-success: #167451;
+  --color-warning: #966116;
+  --shadow-soft: 0 4px 24px -8px rgb(32 41 54 / 8%), 0 1px 3px rgb(32 41 54 / 3%);
+  --shadow-float: 0 12px 40px -12px rgb(32 41 54 / 16%), 0 2px 6px rgb(32 41 54 / 3%);
+  --ease-fluid: cubic-bezier(.22, 1, .36, 1);
   --breakpoint-*: initial;
   --breakpoint-mobile: 680px;
   --breakpoint-tablet: 850px;
@@ -31,24 +33,29 @@
   :root {
     @apply font-sans text-ink bg-canvas;
     font-synthesis: none;
-    color-scheme: dark;
+    color-scheme: light;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
   *, ::before, ::after { box-sizing: border-box; }
-  body { @apply m-0 min-w-80; }
+  body { @apply m-0 min-w-80 font-sans text-base; line-height: 1.6; }
   a { color: inherit; text-decoration: none; }
   button, input, textarea, select { font: inherit; }
   button { border: 0; background: transparent; color: inherit; }
-  button, a { -webkit-tap-highlight-color: transparent; }
+  button, a { -webkit-tap-highlight-color: transparent; touch-action: manipulation; }
   button, summary { @apply cursor-pointer; }
   button:disabled { @apply cursor-not-allowed; }
   a:focus-visible, button:focus-visible, summary:focus-visible {
     @apply outline-2 outline-focus outline-offset-4;
   }
   h1, h2, h3, p { margin-top: 0; }
-  h1 { @apply mb-2 text-[30px] leading-[1.35] tracking-tight max-mobile:text-[25px]; }
+  h1 { @apply mb-2 text-[34px] font-semibold leading-[1.35] tracking-tight max-mobile:text-[26px]; text-wrap: balance; }
   h2 { @apply text-lg font-semibold; }
   svg { @apply size-[1em]; }
   ::selection { @apply bg-brand/25 text-ink; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-thumb { background: #c9d0dc; border: 1px solid transparent; border-radius: 6px; background-clip: padding-box; }
+  ::-webkit-scrollbar-track { background: transparent; }
   @media (prefers-reduced-motion: reduce) {
     *, ::before, ::after {
       transition-duration: 0s !important;
@@ -60,14 +67,18 @@
 
 /* 公共模式统一主题；具体页面布局全部保留在 Vue 的 Tailwind 类中。 */
 @layer components {
-  :root, html.dark {
+  :root {
     --el-color-primary: var(--color-brand);
-    --el-color-primary-light-3: #a5daff;
-    --el-color-primary-light-5: #42657f;
-    --el-color-primary-light-7: #2d465f;
-    --el-color-primary-light-8: #243a51;
-    --el-color-primary-light-9: #192d42;
-    --el-color-primary-dark-2: #62b6ee;
+    --el-color-primary-light-3: #6685f0;
+    --el-color-primary-light-5: #9baff5;
+    --el-color-primary-light-7: #c3d0fb;
+    --el-color-primary-light-8: #d7e0fc;
+    --el-color-primary-light-9: #eef2fe;
+    --el-color-primary-dark-2: #284cc9;
+    --el-color-success-light-9: #eff9f4;
+    --el-color-warning-light-9: #fff8eb;
+    --el-color-danger-light-9: #fff0f2;
+    --el-color-info-light-9: #f2f5f9;
     --el-color-success: var(--color-success);
     --el-color-warning: var(--color-warning);
     --el-color-danger: var(--color-danger);
@@ -75,46 +86,52 @@
     --el-color-info: var(--color-muted);
     --el-bg-color: var(--color-surface);
     --el-bg-color-page: var(--color-canvas);
-    --el-bg-color-overlay: var(--color-raised);
+    --el-bg-color-overlay: var(--color-surface);
     --el-fill-color-blank: var(--color-surface);
     --el-fill-color: var(--color-raised);
     --el-fill-color-light: var(--color-raised);
-    --el-fill-color-lighter: #182231;
-    --el-fill-color-extra-light: #192431;
-    --el-fill-color-dark: #253349;
+    --el-fill-color-lighter: #f5f7fb;
+    --el-fill-color-extra-light: #fafbfd;
+    --el-fill-color-dark: #e3e9f2;
     --el-text-color-primary: var(--color-ink);
-    --el-text-color-regular: #c9d5e5;
+    --el-text-color-regular: #465267;
     --el-text-color-secondary: var(--color-muted);
-    --el-text-color-placeholder: #97a8c0;
-    --el-text-color-disabled: #78879a;
+    --el-text-color-placeholder: #69778c;
+    --el-text-color-disabled: #97a2b4;
     --el-border-color: var(--color-line);
-    --el-border-color-light: #2a394f;
-    --el-border-color-lighter: #27354a;
-    --el-border-color-extra-light: #223045;
+    --el-border-color-light: #e9edf3;
+    --el-border-color-lighter: #eef1f6;
+    --el-border-color-extra-light: #f4f6fa;
     --el-border-radius-base: 10px;
-    --el-mask-color: #0b1019d9;
-    --el-mask-color-extra-light: #0b101980;
+    --el-mask-color: #20293666;
+    --el-mask-color-extra-light: #20293633;
+    --el-font-family: var(--font-sans);
+    --el-font-size-base: 14px;
   }
-  .el-button { @apply min-h-10 font-medium; }
+  .el-button { @apply min-h-11 font-medium; transition: color 160ms, background-color 160ms, border-color 160ms, box-shadow 200ms, transform 160ms var(--ease-fluid); }
+  .el-button:active:not(:disabled) { transform: scale(.98); }
   .el-button.is-circle { @apply min-h-10 min-w-10; }
   .el-button--primary:not(.is-text):not(.is-link):not(.is-plain) {
-    --el-button-text-color: #0b1019;
-    --el-button-hover-text-color: #0b1019;
-    --el-button-active-text-color: #0b1019;
-    --el-button-disabled-text-color: #0b1019;
+    --el-button-text-color: #ffffff;
+    --el-button-hover-text-color: #ffffff;
+    --el-button-active-text-color: #ffffff;
+    --el-button-disabled-text-color: #ffffff;
+    box-shadow: 0 3px 8px -3px rgb(54 94 234 / 30%);
   }
   .el-message-box { @apply max-w-[calc(100vw-32px)]; }
   .el-dialog__body { @apply text-ink; }
+  .el-dialog { box-shadow: 0 32px 100px -24px rgb(32 41 54 / 26%); }
+  .el-overlay { backdrop-filter: blur(4px); }
   .el-input__wrapper, .el-textarea__inner { @apply transition-shadow duration-150; }
-  .ui-muted { @apply text-sm text-muted leading-[1.8]; }
+  .ui-muted { @apply text-[15px] text-muted leading-[1.8]; }
   .ui-eyebrow { @apply mb-3 text-xs font-medium text-brand; }
   .ui-page-heading {
     @apply mb-7 flex items-center justify-between gap-6 max-mobile:flex-wrap max-mobile:items-start max-mobile:gap-4;
   }
   .ui-page-heading .ui-muted { @apply mb-0; }
   .ui-page-heading > .el-button { @apply shrink-0; }
-  .ui-panel { @apply min-w-0 rounded-2xl border border-line/70 bg-surface p-6; }
-  .ui-dialog { @apply max-w-[calc(100vw-32px)] rounded-2xl border border-line p-6; }
+  .ui-panel { @apply min-w-0 rounded-[20px] border border-line/60 bg-surface p-7 shadow-soft max-mobile:p-5; }
+  .ui-dialog { @apply max-w-[calc(100vw-32px)] rounded-[24px] border-0 p-7; }
   .ui-field { @apply mb-6; }
   .ui-field > label { @apply mb-2.5 block text-sm font-medium text-ink; }
   .ui-field .el-input__wrapper { @apply min-h-11; }
@@ -131,4 +148,16 @@
   .ui-empty-icon { @apply mx-auto mb-6 grid size-16 place-items-center rounded-2xl border border-brand/20 bg-brand/10 text-3xl text-brand; }
   .ui-state { @apply rounded-2xl border border-line bg-surface px-6 py-12 text-center; }
   .ui-state > p { @apply text-sm leading-[1.8] text-muted; }
+
+  /* 所有过渡都可被新操作打断；业务状态不等待动画结束。 */
+  .ui-interactive {
+    transition: color 180ms, background-color 180ms, border-color 180ms, box-shadow 220ms, transform 220ms var(--ease-fluid);
+  }
+  .ui-interactive:active:not(:disabled) { transform: scale(.985); }
+  .ui-enter { animation: content-arrive 260ms var(--ease-fluid) both; }
+  .page-enter-active, .content-enter-active { transition: opacity 240ms, transform 280ms var(--ease-fluid); }
+  .page-leave-active, .content-leave-active { transition: opacity 100ms; }
+  .page-enter-from, .content-enter-from { opacity: 0; transform: translateY(6px); }
+  .page-leave-to, .content-leave-to { opacity: 0; }
+  @keyframes content-arrive { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 }

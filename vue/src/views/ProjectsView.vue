@@ -7,6 +7,8 @@ import {
   Refresh,
   Edit,
   Delete,
+  Grid,
+  List,
 } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import * as projectApi from "@/api/project_api";
@@ -22,6 +24,7 @@ const projectIconClasses = [
 ];
 
 const projects = ref<ProjectVO[]>([]);
+const viewMode = ref<"grid" | "list">("grid");
 const total = ref(0);
 const page = ref(1);
 const pageSize = 9;
@@ -105,16 +108,22 @@ onMounted(loadProjects);
 
 <template>
   <section aria-labelledby="projects-title">
-    <div class="ui-page-heading border-b border-line/70 pb-7">
+    <div class="ui-page-heading pb-6 pt-2">
       <div>
-        <h1 id="projects-title">我的项目<span v-if="!loading && !error" class="ml-3 rounded-lg bg-raised px-2.5 py-1 align-middle text-sm font-normal tracking-normal text-muted">{{ total }}</span></h1>
-        <p class="ui-muted">选择一个项目，连接需求、知识与下一步行动。</p>
+        <h1 id="projects-title">我的项目</h1>
+        <p class="ui-muted">留住每个好想法，一步步把它变成现实。</p>
       </div>
       <el-button type="primary" :icon="Plus" size="large" @click="openEditor()">新建项目</el-button>
     </div>
     <div class="mb-5 flex items-center justify-between">
-      <h2 class="m-0 text-sm font-medium text-muted">全部项目</h2>
-      <el-button text :icon="Refresh" :loading="loading" @click="loadProjects">刷新</el-button>
+      <h2 class="m-0 text-sm font-medium text-ink">全部项目<span v-if="!loading && !error" class="ml-2 text-muted">{{ total }}</span></h2>
+      <div class="flex items-center gap-3">
+        <el-button text :icon="Refresh" :loading="loading" @click="loadProjects">刷新</el-button>
+        <div class="flex rounded-xl bg-raised/80 p-1" aria-label="项目展示方式">
+          <button type="button" aria-label="网格视图" title="网格视图" :aria-pressed="viewMode === 'grid'" class="ui-interactive grid size-9 place-items-center rounded-lg" :class="viewMode === 'grid' ? 'bg-white text-ink shadow-soft' : 'text-muted'" @click="viewMode = 'grid'"><Grid /></button>
+          <button type="button" aria-label="列表视图" title="列表视图" :aria-pressed="viewMode === 'list'" class="ui-interactive grid size-9 place-items-center rounded-lg" :class="viewMode === 'list' ? 'bg-white text-ink shadow-soft' : 'text-muted'" @click="viewMode = 'list'"><List /></button>
+        </div>
+      </div>
     </div>
     <div v-if="loading" class="grid grid-cols-3 gap-5 max-desktop:grid-cols-2 max-mobile:grid-cols-1" aria-label="正在加载项目" aria-busy="true">
       <div v-for="n in 3" :key="n" class="ui-panel"><el-skeleton :rows="4" animated /></div>
@@ -130,18 +139,20 @@ onMounted(loadProjects);
       <el-button type="primary" :icon="Plus" @click="openEditor()">创建第一个项目</el-button>
       <p class="ui-empty-example">例如：个人博客、餐厅外卖网站、团队知识库</p>
     </div>
-    <div v-else class="grid grid-cols-3 gap-5 max-desktop:grid-cols-2 max-mobile:grid-cols-1">
-      <article v-for="(project, index) in projects" :key="project.id" class="group flex min-w-0 flex-col rounded-2xl border border-line/70 bg-surface p-6 transition-colors duration-200 hover:border-brand/50">
-        <div class="flex items-center justify-between">
+    <div v-else :key="viewMode" class="ui-enter grid gap-5" :class="viewMode === 'grid' ? 'grid-cols-3 max-desktop:grid-cols-2 max-mobile:grid-cols-1' : 'grid-cols-1'">
+      <article v-for="(project, index) in projects" :key="project.id" class="ui-interactive group flex min-w-0 flex-col rounded-[22px] border border-line/70 bg-surface p-6 shadow-soft hover:-translate-y-0.5 hover:border-brand/25 hover:shadow-float" :class="{ 'desktop:grid desktop:grid-cols-[44px_minmax(0,1fr)_140px_88px] desktop:items-center desktop:gap-x-6': viewMode === 'list' }">
+        <div class="flex items-center justify-between" :class="{ 'desktop:contents': viewMode === 'list' }">
           <span class="grid size-11 place-items-center rounded-xl text-2xl" :class="projectIconClasses[index % 3]"><FolderOpened aria-hidden="true" /></span>
-          <div class="flex [&>.el-button+.el-button]:ml-0">
+          <div class="flex [&>.el-button+.el-button]:ml-0" :class="{ 'desktop:col-start-4 desktop:row-start-1': viewMode === 'list' }">
             <el-button text circle :aria-label="`编辑项目：${project.name}`" title="编辑项目" @click="openEditor(project)"><el-icon><Edit /></el-icon></el-button>
             <el-button text circle :aria-label="`删除项目：${project.name}`" title="删除项目" :disabled="deletingId !== null" @click="removeProject(project)"><el-icon><Delete /></el-icon></el-button>
           </div>
         </div>
-        <h3 class="mt-7 mb-3 text-xl font-semibold leading-7 wrap-anywhere"><RouterLink :to="`/projects/${project.id}`" class="transition-colors hover:text-brand">{{ project.name }}</RouterLink></h3>
-        <p class="mb-7 min-h-12 line-clamp-2 text-sm leading-6 text-muted wrap-anywhere">{{ project.description || "还没有需求说明，可以打开项目补充。" }}</p>
-        <div class="mt-auto flex flex-wrap items-center justify-between gap-2 border-t border-line/70 pt-4 text-xs text-muted">
+        <div :class="{ 'desktop:col-start-2 desktop:row-start-1': viewMode === 'list' }">
+          <h3 class="mt-6 mb-2 text-xl font-semibold leading-7 wrap-anywhere" :class="{ 'desktop:mt-0': viewMode === 'list' }"><RouterLink :to="`/projects/${project.id}`" class="ui-interactive hover:text-brand">{{ project.name }}</RouterLink></h3>
+          <p class="mb-6 min-h-12 line-clamp-2 text-sm leading-7 text-muted wrap-anywhere" :class="{ 'desktop:mb-0 desktop:min-h-0': viewMode === 'list' }">{{ project.description || "还没有需求说明，可以打开项目补充。" }}</p>
+        </div>
+        <div class="mt-auto flex flex-wrap items-center justify-between gap-2 pt-3 text-xs text-muted" :class="{ 'desktop:col-start-3 desktop:row-start-1 desktop:mt-0 desktop:flex-col desktop:items-end desktop:pt-0': viewMode === 'list' }">
           <span>更新于 {{ formatDate(project.updated_at) }}</span>
           <RouterLink :to="`/projects/${project.id}`" class="inline-flex min-h-10 items-center gap-2 font-medium text-brand">打开项目<el-icon><ArrowRight /></el-icon></RouterLink>
         </div>

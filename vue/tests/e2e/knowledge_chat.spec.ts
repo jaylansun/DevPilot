@@ -12,6 +12,7 @@ async function chat(page: Page) {
     expired: false,
     calls: 0,
     delay: 0,
+    hold: null as Promise<void> | null,
     answer: null as string | null,
     questions: [] as string[],
   };
@@ -54,6 +55,7 @@ async function chat(page: Page) {
       expect(payload).toEqual({ question: expect.any(String) });
       expect(payload.question).toBeTruthy();
       state.questions.push(payload.question);
+      if (state.hold) await state.hold;
       if (state.delay)
         await new Promise((resolve) => setTimeout(resolve, state.delay));
       if (state.fail)
@@ -214,7 +216,7 @@ test("长回答在消息区域滚动，375px 输入框可达，回答中的 HTML
     "<img src=x onerror=alert(1)>\n\n[不安全链接](javascript:alert(1))";
   await page.getByLabel("你想了解什么？").fill("解释订单规则");
   await page.getByRole("button", { name: "发送问题", exact: true }).click();
-  await expect(page.getByRole("heading", { name: "订单说明" })).toHaveCount(1);
+  await expect(page.getByRole("heading", { name: "订单说明", exact: true })).toHaveCount(1);
   await expect(page.getByRole("log").locator("img")).toHaveCount(0);
   await expect(page.getByRole("log").locator('a[href^="javascript:"]')).toHaveCount(0);
   expect(await page.getByTestId("chat-scroll-region").evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
@@ -222,4 +224,54 @@ test("长回答在消息区域滚动，375px 输入框可达，回答中的 HTML
   await expect(page.getByRole("button", { name: "发送问题", exact: true })).toBeInViewport();
   await expect(page.getByLabel("你想了解什么？")).toBeInViewport();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+});
+
+test("输入框随长草稿增长且不超过140px，删除文字后收起", async ({ page }) => {
+  await page.setViewportSize({ width: 375, height: 812 });
+  const state = await chat(page);
+  const input = page.getByLabel("你想了解什么？");
+  await expect(input).toBeEnabled();
+  const initialHeight = await input.evaluate((element) => element.getBoundingClientRect().height);
+  await input.fill("需要进一步确认订单的业务规则与处理限制。\n".repeat(12));
+  await expect.poll(() => input.evaluate((element) => element.getBoundingClientRect().height)).toBeGreaterThan(initialHeight);
+  expect(await input.evaluate((element) => element.getBoundingClientRect().height)).toBeLessThanOrEqual(140);
+  expect(await input.evaluate((element) => element.scrollHeight > element.clientHeight)).toBe(true);
+  await expect(page.getByRole("button", { name: "发送问题", exact: true })).toBeInViewport();
+  await input.fill("短问题");
+  await expect.poll(() => input.evaluate((element) => element.getBoundingClientRect().height)).toBe(initialHeight);
+  await expect(input).toHaveAttribute("maxlength", "2000");
+  expect(state.calls).toBe(0);
+});
+
+test("阅读历史时保留滚动位置，回到最新可继续提问，减少动态模式下同样可用", async ({ page }) => {
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  const state = await chat(page);
+  const input = page.getByLabel("你想了解什么？");
+  const viewport = page.getByTestId("chat-scroll-region");
+  state.answer = "## 第一份资料\n\n" + "订单资料需要核对功能、业务规则和原文引用。\n\n".repeat(24);
+  await input.fill("梳理第一份资料");
+  await page.getByRole("button", { name: "发送问题", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "第一份资料", exact: true })).toHaveCount(1);
+  await expect(input).toBeEnabled();
+  let releaseAnswer!: () => void;
+  state.hold = new Promise<void>((resolve) => { releaseAnswer = resolve; });
+  state.answer = "## 第二份资料\n\n" + "这是一份需要与前文对照的新资料。\n\n".repeat(24);
+  await input.fill("再梳理第二份资料");
+  await page.getByRole("button", { name: "发送问题", exact: true }).click();
+  await expect(page.getByRole("button", { name: "停止等待", exact: true })).toBeVisible();
+  await expect.poll(() => state.calls).toBe(2);
+  await viewport.evaluate((element) => {
+    element.scrollTop = 0;
+    element.dispatchEvent(new Event("scroll"));
+  });
+  await expect(page.getByRole("button", { name: "回到最新", exact: true })).toBeVisible();
+  releaseAnswer();
+  await expect(page.getByRole("heading", { name: "第二份资料", exact: true })).toHaveCount(1);
+  await expect(input).toBeEnabled();
+  await expect.poll(() => viewport.evaluate((element) => element.scrollTop)).toBeLessThan(10);
+  await expect(page.getByRole("button", { name: "回到最新", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "回到最新", exact: true }).click();
+  await expect.poll(() => viewport.evaluate((element) => element.scrollHeight - element.clientHeight - element.scrollTop)).toBeLessThan(64);
+  await expect(input).toBeFocused();
+  await expect(page.getByRole("button", { name: "回到最新", exact: true })).toHaveCount(0);
 });

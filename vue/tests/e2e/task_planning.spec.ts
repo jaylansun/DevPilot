@@ -182,6 +182,9 @@ test("任务规划入口展示只读草案、验收依赖和安全引用，双�
   await expect(preview).toContainText("方案摘要");
   await expect(preview).toContainText(initialSummary);
   await expect(preview).toContainText(unsafeAssumption);
+  const assumptions = preview.getByLabel("规划假设", { exact: true });
+  await assumptions.locator("summary").click();
+  await expect(assumptions.getByText(unsafeAssumption, { exact: true })).toBeVisible();
   await expect(preview).toContainText("并发下单可能造成库存超卖，需要原子扣减与回滚。");
   const firstTask = preview.getByRole("article", {
     name: "任务 T1：实现订单收货信息",
@@ -203,6 +206,7 @@ test("任务规划入口展示只读草案、验收依赖和安全引用，双�
   await expect(secondTask).toContainText("[1]");
   await expect(preview).toContainText("已完成只读工具调用");
   const toolCalls = preview.getByLabel("已完成只读工具调用", { exact: true });
+  await toolCalls.locator("summary").click();
   await expect(toolCalls).toContainText("检索项目文档 · 已完成 · 1 项");
   await expect(toolCalls).toContainText("读取任务看板 · 已完成 · 3 项");
   await expect(
@@ -216,6 +220,9 @@ test("任务规划入口展示只读草案、验收依赖和安全引用，双�
   await source.locator("summary").click();
   await expect(source.locator("blockquote")).toHaveText(sourceText);
   await expect(preview.locator("img, script, iframe")).toHaveCount(0);
+  await source.locator("summary").click();
+  await toolCalls.locator("summary").click();
+  await assumptions.locator("summary").click();
   expect(state.goals).toEqual([{ goal: "完成可靠的下单流程" }]);
   expect(state.unexpectedRequests).toEqual([]);
 
@@ -230,7 +237,7 @@ test("任务规划入口展示只读草案、验收依赖和安全引用，双�
     path: "test-results/screenshots/task-planning-desktop.png",
     fullPage: true,
   });
-  await page.setViewportSize({ width: 390, height: 844 });
+  await page.setViewportSize({ width: 375, height: 844 });
   await page.evaluate(() => window.scrollTo(0, 0));
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
@@ -246,6 +253,42 @@ test("任务规划入口展示只读草案、验收依赖和安全引用，双�
     path: "test-results/screenshots/task-planning-mobile.png",
     fullPage: true,
   });
+});
+
+test("建议目标只填入并聚焦，任务可用键盘展开且尊重减少动态效果", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  const { state } = await planning(page);
+  const input = page.getByLabel("你想完成什么目标？");
+  const suggestion = page.getByRole("button", { name: "规划下一阶段开发", exact: true });
+  await expect(input).toBeInViewport();
+  await expect(page.getByRole("button", { name: "生成任务草案", exact: true })).toBeInViewport();
+  expect(await suggestion.evaluate((element) => parseFloat(getComputedStyle(element).transitionDuration))).toBeGreaterThan(0);
+  await suggestion.click();
+  await expect(input).toHaveValue("根据项目资料，规划下一阶段的开发任务，明确优先级和验收标准。");
+  await expect(input).toBeFocused();
+  expect(state.calls).toBe(0);
+  await page.getByRole("button", { name: "生成任务草案", exact: true }).click();
+  const preview = page.getByRole("region", { name: "任务方案预览" });
+  await expect(preview).toBeVisible();
+  await expect(preview.getByRole("heading", { name: "任务方案预览", exact: true })).toHaveCSS("font-size", "24px");
+  expect(await preview.evaluate((element) => parseFloat(getComputedStyle(element).animationDuration))).toBeGreaterThan(0);
+  const firstTask = preview.getByRole("article", { name: "任务 T1：实现订单收货信息", exact: true });
+  const taskDetails = firstTask.locator("details");
+  const taskSummary = taskDetails.locator("summary");
+  await expect(taskDetails).toHaveJSProperty("open", true);
+  await taskSummary.focus();
+  await taskSummary.press("Enter");
+  await expect(taskDetails).toHaveJSProperty("open", false);
+  await expect(firstTask.locator("dd").first()).toBeHidden();
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect(preview).toHaveCSS("animation-duration", "0s");
+  await expect(taskSummary).toHaveCSS("transition-duration", "0s");
+  await taskSummary.press("Enter");
+  await expect(taskDetails).toHaveJSProperty("open", true);
+  await expect(firstTask.locator("dd").first()).toBeVisible();
+  expect(state.calls).toBe(1);
+  expect(state.unexpectedRequests).toEqual([]);
 });
 
 test("重新生成开始立即移除旧草案，新方案对应新目标", async ({ page }) => {
@@ -311,6 +354,7 @@ test("取消生成保留目标，迟到响应不会覆盖重试结果", async ({
     await expect(page.getByRole("alert")).toContainText(/已取消|已停止/);
     await expect(input).toHaveValue("完成订单校验");
     await expect(input).toBeEnabled();
+    await expect(input).toBeFocused();
     await expect(preview).toHaveCount(0);
     state.summary = "取消后重试得到的最新方案。";
     await page.getByRole("button", { name: "生成任务草案", exact: true }).click();

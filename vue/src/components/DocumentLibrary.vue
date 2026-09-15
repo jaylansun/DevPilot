@@ -147,162 +147,79 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section aria-label="项目知识库" class="space-y-6">
-    <div class="ui-panel">
-      <div class="flex items-start gap-4 max-mobile:flex-col">
-        <span
-          class="grid size-12 shrink-0 place-items-center rounded-xl bg-brand/10 text-2xl text-brand"
-        >
-          <el-icon><UploadFilled /></el-icon>
-        </span>
-        <div class="min-w-0 flex-1">
-          <h2 class="m-0 text-lg">把项目资料放在这里</h2>
-          <p class="ui-muted text-sm leading-7">
-            上传需求说明、产品规则或验收标准，为后续 AI 问答准备可检索的资料。
-          </p>
-          <p class="ui-help">
-            支持 UTF-8 编码的 .md / .txt，每个文件最多 2 MB，每个项目最多 20
-            个。
-          </p>
+  <section aria-label="项目知识库" class="ui-enter space-y-6">
+    <div class="pb-2">
+      <div class="flex flex-wrap items-start justify-between gap-4">
+        <div class="min-w-0">
+          <h2 class="m-0 text-xl font-semibold">把项目资料放在这里</h2>
+          <p class="mt-2 mb-0 text-sm leading-7 text-muted">上传需求说明、产品规则或验收标准，让 AI 能根据资料回答问题。</p>
         </div>
-        <span class="rounded-lg bg-canvas px-3 py-2 text-sm text-muted"
-          >{{ documents.length }} / 20 个文档</span
-        >
+        <span class="rounded-full bg-raised px-3 py-1.5 text-xs text-muted">{{ documents.length }} / 20 个文档</span>
       </div>
-      <form
-        class="mt-5 flex items-center gap-3 max-mobile:flex-col max-mobile:items-stretch"
-        @submit.prevent="upload"
-      >
-        <input
-          ref="fileInput"
-          type="file"
-          accept=".md,.txt"
-          aria-label="选择知识库文档"
-          class="min-w-0 flex-1 rounded-lg border border-line bg-canvas p-3 text-sm text-muted file:mr-3 file:min-h-10 file:cursor-pointer file:rounded-md file:border-0 file:bg-raised file:px-3 file:py-2 file:text-brand"
-          :disabled="uploading"
-          @change="chooseFile"
-        />
-        <el-button
-          native-type="submit"
-          type="primary"
-          class="min-h-11!"
-          :loading="uploading"
-          :disabled="loading || documents.length >= 20 || !selectedFile"
-          >上传文档</el-button
-        >
+      <form class="mt-5 flex flex-wrap items-center gap-3 rounded-2xl bg-surface p-4 mobile:p-5" @submit.prevent="upload">
+        <div class="min-w-0 flex-1 max-mobile:basis-full">
+          <label for="knowledge-upload" class="mb-2 block text-sm font-medium">选择知识库文档</label>
+          <input
+            id="knowledge-upload"
+            ref="fileInput"
+            type="file"
+            accept=".md,.txt"
+            aria-label="选择知识库文档"
+            class="ui-interactive block min-h-11 w-full min-w-0 rounded-lg border-0 bg-transparent text-sm text-muted file:mr-3 file:min-h-11 file:cursor-pointer file:rounded-lg file:border-0 file:bg-raised file:px-4 file:py-2 file:text-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-50"
+            :disabled="uploading"
+            @change="chooseFile"
+          />
+          <p class="mt-2 mb-0 text-xs leading-6 text-muted">支持 UTF-8 编码的 .md / .txt，每个文件最多 2 MB，每个项目最多 20 个。</p>
+        </div>
+        <el-button native-type="submit" type="primary" :icon="UploadFilled" class="ui-interactive min-h-11! max-mobile:w-full" :loading="uploading" :disabled="loading || documents.length >= 20 || !selectedFile">上传文档</el-button>
       </form>
-      <div
-        class="mt-5 rounded-lg border border-warning/25 bg-warning/10 px-4 py-3 text-xs leading-6 text-warning"
-      >
-        首次索引需要下载本地中文向量模型，可能需要几分钟；之后会复用缓存。
-        向量化在服务器本地完成，无需填写大模型 API Key。索引就绪后可进入“AI
-        问答”；真实问答会把相关片段发送给服务器配置的模型服务。
-      </div>
+      <details class="mt-2 text-sm text-muted">
+        <summary class="ui-interactive min-h-11 cursor-pointer py-3 hover:text-brand">索引与模型使用说明</summary>
+        <p class="ui-enter mt-0 mb-0 max-w-prose rounded-xl bg-raised/55 px-4 py-3 text-sm leading-7">
+          首次索引需要下载本地中文向量模型，可能需要几分钟；之后会复用缓存。向量化在服务器本地完成，无需填写大模型 API Key。索引就绪后可进入“AI 问答”；真实问答会把相关片段发送给服务器配置的模型服务。
+        </p>
+      </details>
     </div>
 
-    <div
-      v-if="error"
-      class="ui-error flex flex-wrap items-center justify-between gap-3"
-      role="alert"
-    >
-      <span>{{ error }}</span>
-      <el-button size="small" class="min-h-10!" @click="load()">重新加载列表</el-button>
+    <div v-if="error" class="ui-error ui-enter flex flex-wrap items-center justify-between gap-3" role="alert">
+      <span class="min-w-0 wrap-anywhere">{{ error }}</span>
+      <el-button size="small" class="ui-interactive min-h-11!" @click="load()">重新加载列表</el-button>
     </div>
     <div class="flex items-center justify-between gap-3">
-      <h2 class="m-0 text-base">
-        项目文档
-        <span class="ml-2 text-xs font-normal text-muted"
-          >{{ readyCount }} 个已就绪</span
-        >
-      </h2>
-      <el-button
-        text
-        :icon="Refresh"
-        class="min-h-10!"
-        :loading="loading"
-        :disabled="uploading || !!workingId"
-        aria-label="刷新知识库"
-        @click="load()"
-        >刷新</el-button
-      >
+      <h2 class="m-0 text-base font-semibold">项目文档 <span class="ml-2 text-xs font-normal text-muted">{{ readyCount }} 个已就绪</span></h2>
+      <el-button text :icon="Refresh" class="ui-interactive min-h-11!" :loading="loading" :disabled="uploading || !!workingId" aria-label="刷新知识库" @click="load()">刷新</el-button>
     </div>
-    <el-skeleton
-      v-if="loading && !documents.length"
-      class="ui-panel"
-      :rows="4"
-      animated
-    />
-    <div v-else-if="!documents.length && !error" class="ui-empty">
-      <el-icon class="ui-empty-icon"><Document /></el-icon>
-      <h3>还没有项目文档</h3>
-      <p>先上传一份需求说明，让 AI 之后能够根据资料回答问题。</p>
+    <el-skeleton v-if="loading && !documents.length" class="rounded-2xl bg-surface p-6" :rows="4" animated />
+    <div v-else-if="!documents.length && !error" class="ui-enter rounded-2xl bg-surface px-6 py-12 text-center">
+      <el-icon class="mb-4 text-3xl text-brand" aria-hidden="true"><Document /></el-icon>
+      <h3 class="mb-3 text-lg font-semibold">还没有项目文档</h3>
+      <p class="m-0 text-sm leading-7 text-muted">先上传一份需求说明，让 AI 之后能够根据资料回答问题。</p>
     </div>
-    <div v-else class="grid grid-cols-2 gap-4 max-tablet:grid-cols-1">
-      <article
-        v-for="doc in documents"
-        :key="doc.id"
-        :aria-label="doc.filename"
-        class="ui-panel min-w-0"
-      >
-        <div class="flex items-start justify-between gap-3">
-          <h3 class="m-0 min-w-0 text-sm leading-6 wrap-anywhere">
-            {{ doc.filename }}
-          </h3>
-          <span
-            class="shrink-0 rounded-md px-2 py-1 text-xs"
-            :class="statuses[doc.status].color"
-            >{{ statuses[doc.status].label }}</span
-          >
-        </div>
-        <p class="my-4 text-xs text-muted">
-          {{ (doc.size_bytes / 1024).toFixed(1) }} KB ·
-          {{ doc.chunk_count }} 个片段
-        </p>
-        <p
-          v-if="doc.error_message"
-          class="ui-error text-xs leading-6"
-          role="alert"
-        >
-          {{ doc.error_message }}
-        </p>
-        <p v-else-if="doc.status === 'indexing'" class="ui-help">
-          正在下载模型或生成向量，可以离开此页面，稍后回来查看。
-        </p>
-        <p v-else-if="doc.status === 'deleting'" class="ui-help">
-          正在清理文档向量，完成后会自动移除。
-        </p>
-        <div
-          class="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-line pt-3"
-        >
-          <time :datetime="doc.created_at" class="text-xs text-muted">{{
-            new Date(doc.created_at).toLocaleString("zh-CN", { hour12: false })
-          }}</time>
-          <div class="flex gap-2 [&>.el-button+.el-button]:ml-0">
-            <el-button
-              v-if="doc.status === 'failed' || doc.status === 'delete_failed'"
-              text
-              type="primary"
-              class="min-h-10!"
-              :disabled="!!workingId || uploading"
-              :aria-label="'重试文档 ' + doc.filename"
-              @click="operate(doc, false)"
-              >重试</el-button
-            >
-            <el-button
-              text
-              type="danger"
-              class="min-h-10!"
-              :disabled="doc.status === 'deleting' || !!workingId || uploading"
-              :aria-label="'删除文档 ' + doc.filename"
-              @click="operate(doc, true)"
-              >删除</el-button
-            >
+    <div v-else class="ui-enter divide-y divide-line rounded-2xl bg-surface">
+      <article v-for="doc in documents" :key="doc.id" :aria-label="doc.filename" class="ui-interactive min-w-0 px-5 py-5 first:rounded-t-2xl last:rounded-b-2xl hover:bg-canvas/60 mobile:px-6">
+        <div class="flex items-start gap-3">
+          <span class="grid size-10 shrink-0 place-items-center rounded-xl bg-raised text-lg text-brand" aria-hidden="true"><el-icon><Document /></el-icon></span>
+          <div class="min-w-0 flex-1">
+            <div class="flex flex-wrap items-start justify-between gap-3">
+              <h3 class="m-0 min-w-0 text-base font-medium leading-7 wrap-anywhere">{{ doc.filename }}</h3>
+              <span class="shrink-0 rounded-full px-2.5 py-1 text-xs" :class="statuses[doc.status].color">{{ statuses[doc.status].label }}</span>
+            </div>
+            <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs leading-6 text-muted">
+              <span>{{ (doc.size_bytes / 1024).toFixed(1) }} KB</span>
+              <span>{{ doc.chunk_count }} 个片段</span>
+              <time :datetime="doc.created_at">{{ new Date(doc.created_at).toLocaleString("zh-CN", { hour12: false }) }}</time>
+            </div>
+            <p v-if="doc.error_message" class="ui-error ui-enter mt-3 mb-0 text-sm leading-7 wrap-anywhere" role="alert">{{ doc.error_message }}</p>
+            <p v-else-if="doc.status === 'indexing'" class="mt-3 mb-0 text-sm leading-7 text-muted">正在下载模型或生成向量，可以离开此页面，稍后回来查看。</p>
+            <p v-else-if="doc.status === 'deleting'" class="mt-3 mb-0 text-sm leading-7 text-muted">正在清理文档向量，完成后会自动移除。</p>
           </div>
+        </div>
+        <div class="mt-2 flex justify-end gap-2 [&>.el-button+.el-button]:ml-0">
+          <el-button v-if="doc.status === 'failed' || doc.status === 'delete_failed'" text type="primary" class="ui-interactive min-h-11!" :disabled="!!workingId || uploading" :aria-label="'重试文档 ' + doc.filename" @click="operate(doc, false)">重试</el-button>
+          <el-button text type="danger" class="ui-interactive min-h-11!" :disabled="doc.status === 'deleting' || !!workingId || uploading" :aria-label="'删除文档 ' + doc.filename" @click="operate(doc, true)">删除</el-button>
         </div>
       </article>
     </div>
-    <p v-if="pending && !error" class="ui-help" role="status">
-      后台正在处理，列表每 3 秒自动更新。
-    </p>
+    <p v-if="pending && !error" class="ui-help" role="status">后台正在处理，列表每 3 秒自动更新。</p>
   </section>
 </template>

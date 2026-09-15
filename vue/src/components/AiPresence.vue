@@ -167,62 +167,83 @@ onBeforeUnmount(() => {
       >
         <defs>
           <linearGradient
-            :id="`${gradientId}-metal`"
-            x1="74"
-            y1="73"
-            x2="243"
-            y2="248"
+            :id="`${gradientId}-front`"
+            x1="70"
+            y1="98"
+            x2="210"
+            y2="245"
             gradientUnits="userSpaceOnUse"
           >
-            <stop stop-color="#d7eeff" />
-            <stop offset="0.25" stop-color="#8296af" />
-            <stop offset="0.5" stop-color="#263f5a" />
-            <stop offset="0.73" stop-color="#8ccfff" />
-            <stop offset="1" stop-color="#344f69" />
+            <stop stop-color="#e4edff" />
+            <stop offset="0.45" stop-color="#c3dbf5" />
+            <stop offset="1" stop-color="#bfd0ed" />
           </linearGradient>
-          <radialGradient
-            :id="`${gradientId}-core`"
-            cx="0"
-            cy="0"
-            r="1"
-            gradientTransform="translate(150 145) rotate(48) scale(51)"
+          <linearGradient
+            :id="`${gradientId}-top`"
+            x1="88"
+            y1="59"
+            x2="224"
+            y2="152"
             gradientUnits="userSpaceOnUse"
           >
-            <stop stop-color="#d7f0ff" />
-            <stop offset="0.3" stop-color="#8ccfff" />
-            <stop offset="0.72" stop-color="#39688a" />
-            <stop offset="1" stop-color="#122c43" />
+            <stop stop-color="#e9f4ff" />
+            <stop offset="1" stop-color="#b8c8eb" />
+          </linearGradient>
+          <linearGradient
+            :id="`${gradientId}-side`"
+            x1="196"
+            y1="110"
+            x2="270"
+            y2="254"
+            gradientUnits="userSpaceOnUse"
+          >
+            <stop stop-color="#c3c5ed" />
+            <stop offset="0.5" stop-color="#ded6f3" />
+            <stop offset="1" stop-color="#c4d4ed" />
+          </linearGradient>
+          <radialGradient :id="`${gradientId}-shadow`">
+            <stop stop-color="#899ec2" stop-opacity="0.17" />
+            <stop offset="1" stop-color="#899ec2" stop-opacity="0" />
           </radialGradient>
         </defs>
         <ellipse
-          cx="160"
-          cy="160"
-          rx="101"
-          ry="60"
-          transform="rotate(-30 160 160)"
-          :stroke="`url(#${gradientId}-metal)`"
-          stroke-width="18"
+          cx="158"
+          cy="280"
+          rx="94"
+          ry="17"
+          :fill="`url(#${gradientId}-shadow)`"
         />
-        <ellipse
-          cx="160"
-          cy="160"
-          rx="57"
-          ry="86"
-          transform="rotate(-25 160 160)"
-          :stroke="`url(#${gradientId}-metal)`"
-          stroke-width="12"
-        />
-        <circle cx="160" cy="160" r="33" :fill="`url(#${gradientId}-core)`" />
         <path
-          d="M78 196c20 13 60 10 97-8s65-45 69-65"
-          :stroke="`url(#${gradientId}-metal)`"
-          stroke-width="18"
+          d="m82 89 104-36q10-3 17 5l55 65q5 6 4 14l-53 29-108-25-25-35q-6-12 6-17Z"
+          :fill="`url(#${gradientId}-top)`"
+        />
+        <path
+          d="m262 130-5 118q0 10-11 11l-103 5-9-135 128 1Z"
+          :fill="`url(#${gradientId}-side)`"
+        />
+        <path
+          d="m80 91 105 36q8 3 8 13l-7 111q-1 12-12 12l-107-37q-11-4-9-16L74 104q1-10 6-13Z"
+          :fill="`url(#${gradientId}-front)`"
+          fill-opacity="0.87"
+        />
+        <path
+          d="m86 96 99 34q5 2 5 9l-7 109"
+          stroke="white"
+          stroke-opacity="0.68"
+          stroke-width="1.5"
           stroke-linecap="round"
         />
         <path
-          d="M137 87c-12 19-12 51-3 84s26 61 44 70"
-          :stroke="`url(#${gradientId}-metal)`"
-          stroke-width="12"
+          d="m117 122 75-20q7-2 12 5l30 40-4 70q0 8-8 9l-79 7q-7 0-11-6l-29-34 8-62q1-7 6-9Z"
+          stroke="#9daedb"
+          stroke-opacity="0.26"
+          stroke-width="3"
+        />
+        <path
+          d="m193 140-5 68q-1 8-10 10l-54 7"
+          stroke="#e9e4ff"
+          stroke-opacity="0.65"
+          stroke-width="7"
           stroke-linecap="round"
         />
       </svg>
@@ -235,13 +256,14 @@ onBeforeUnmount(() => {
     <button
       v-if="ready && !unavailable && !reducedMotion"
       type="button"
-      class="absolute bottom-0 right-0 flex min-h-11 min-w-11 cursor-pointer items-center justify-center rounded-full border border-white/20 bg-[#141c2a]/90 text-[#b7cede] transition-colors hover:border-[#8ccfff]/60 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#8ccfff] motion-reduce:transition-none"
+      class="absolute bottom-0 right-0 flex min-h-11 min-w-11 cursor-pointer items-center justify-center rounded-xl text-[#637086] transition-colors before:absolute before:inset-2 before:rounded-lg before:bg-white/85 before:shadow-[0_2px_10px_rgba(35,55,100,0.06)] hover:text-[#365eea] hover:before:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#365eea] motion-reduce:transition-none"
       :aria-label="paused ? '播放装饰动画' : '暂停装饰动画'"
       :title="paused ? '播放装饰动画' : '暂停装饰动画'"
       @click="toggleMotion"
     >
       <svg
         v-if="paused"
+        class="relative"
         width="14"
         height="14"
         viewBox="0 0 16 16"
@@ -252,6 +274,7 @@ onBeforeUnmount(() => {
       </svg>
       <svg
         v-else
+        class="relative"
         width="14"
         height="14"
         viewBox="0 0 16 16"
@@ -264,7 +287,7 @@ onBeforeUnmount(() => {
     </button>
     <span
       v-if="reducedMotion && ready"
-      class="absolute bottom-1 right-1 text-xs text-[#9daec0]"
+      class="absolute bottom-1 right-1 text-xs text-[#637086]"
       >已减少动态</span
     >
   </div>

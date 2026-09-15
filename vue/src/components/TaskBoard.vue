@@ -25,8 +25,8 @@ const priorityColors: Record<number, string> = {
   1: "bg-danger/10 text-danger",
   2: "bg-warning/10 text-warning",
   3: "bg-brand/10 text-brand",
-  4: "bg-surface text-muted",
-  5: "bg-surface text-muted",
+  4: "bg-raised text-muted",
+  5: "bg-raised text-muted",
 };
 
 const props = defineProps<{ projectId: string }>();
@@ -134,7 +134,7 @@ function clearFilters() {
 <template>
   <section aria-label="任务看板">
     <div
-      class="mb-6 flex items-center justify-between gap-5 [&_h2]:mb-2 [&_h2]:text-[19px] [&_p]:m-0 [&_p]:text-xs [&_p]:leading-[1.8] [&_p]:text-muted max-mobile:flex-wrap max-mobile:items-start max-mobile:gap-3.5 max-mobile:[&_h2]:text-[17px]"
+      class="mb-6 flex items-center justify-between gap-5 [&_h2]:mb-2 [&_h2]:text-xl [&_p]:m-0 [&_p]:text-sm [&_p]:leading-7 [&_p]:text-muted max-mobile:flex-wrap max-mobile:items-start max-mobile:gap-4"
     >
       <div>
         <h2>把目标，变成下一步行动</h2>
@@ -143,6 +143,7 @@ function clearFilters() {
       <el-button
         type="primary"
         :icon="Plus"
+        class="ui-interactive min-h-11!"
         :disabled="Boolean(busyId)"
         @click="create()"
         >新建任务</el-button
@@ -157,7 +158,7 @@ function clearFilters() {
           ><select
             id="board-status-filter"
             v-model="statusFilter"
-            class="ui-select"
+            class="ui-select ui-interactive"
             :disabled="Boolean(busyId)"
           >
             <option value="">全部状态</option>
@@ -175,7 +176,7 @@ function clearFilters() {
           ><select
             id="board-priority-filter"
             v-model.number="priorityFilter"
-            class="ui-select"
+            class="ui-select ui-interactive"
             :disabled="Boolean(busyId)"
           >
             <option value="">全部优先级</option>
@@ -190,6 +191,7 @@ function clearFilters() {
         </div>
         <el-button
           v-if="statusFilter || priorityFilter"
+          class="ui-interactive min-h-11!"
           text
           :disabled="Boolean(busyId)"
           @click="clearFilters"
@@ -208,6 +210,7 @@ function clearFilters() {
         }}</span
         ><el-button
           :icon="Refresh"
+          class="ui-interactive min-h-11! min-w-11!"
           circle
           aria-label="刷新任务看板"
           :loading="loading"
@@ -225,7 +228,7 @@ function clearFilters() {
       class="mb-[18px]"
     />
     <div
-      class="grid items-start gap-[18px]"
+      class="ui-enter grid items-start gap-4"
       :class="
         visibleColumns.length === 1
           ? 'grid-cols-1 max-w-[700px]'
@@ -235,21 +238,21 @@ function clearFilters() {
       <section
         v-for="column in visibleColumns"
         :key="column.status"
-        class="min-w-0 overflow-hidden rounded-xl border border-line bg-surface"
+        class="min-w-0 overflow-hidden rounded-2xl bg-raised/65"
         :class="columnColors[column.status]"
         data-testid="task-column"
         :aria-label="`${column.label}任务`"
         :aria-busy="columns[column.status].loading"
       >
         <header
-          class="flex items-center justify-between border-t-[3px] [border-top-color:var(--column-color)] px-4 py-[18px] [&_h3]:mt-0 [&_h3]:mb-2 [&_h3]:flex [&_h3]:items-center [&_h3]:gap-2 [&_h3]:text-sm [&_p]:m-0 [&_p]:text-xs [&_p]:text-muted"
+          class="flex items-center justify-between px-4 py-5 [&_h3]:mt-0 [&_h3]:mb-2 [&_h3]:flex [&_h3]:items-center [&_h3]:gap-2 [&_h3]:text-sm [&_p]:m-0 [&_p]:text-xs [&_p]:text-muted"
         >
           <div>
             <h3>
-              <span class="size-[7px] rounded-full bg-(--column-color)" />{{
+              <span class="size-2 rounded-full bg-(--column-color)" aria-hidden="true" />{{
                 column.label
               }}<span
-                class="rounded-[5px] bg-raised px-1.5 py-0.5 text-xs text-muted"
+                class="rounded-full bg-surface/80 px-2 py-0.5 text-xs text-muted"
                 >{{ columns[column.status].total }}</span
               >
             </h3>
@@ -257,7 +260,7 @@ function clearFilters() {
           </div>
           <el-button
             :icon="Plus"
-            class="min-h-10! min-w-10!"
+            class="ui-interactive min-h-11! min-w-11!"
             text
             circle
             :aria-label="`新建${column.label}任务`"
@@ -266,17 +269,17 @@ function clearFilters() {
           />
         </header>
         <div
-          class="flex min-h-[225px] flex-col gap-3 px-2.5 pb-3 max-board:min-h-40"
+          class="flex min-h-[225px] flex-col gap-3 px-3 pb-3 max-board:min-h-40"
         >
           <article
             v-for="task in columns[column.status].items"
             :key="task.id"
-            class="min-w-0 rounded-[9px] border border-line bg-raised px-3.5 pt-4 pb-2.5"
+            class="ui-interactive min-w-0 rounded-xl bg-surface px-4 pt-4 pb-2.5 shadow-sm shadow-ink/5 focus-within:shadow-md focus-within:shadow-brand/8"
             :aria-label="task.title"
           >
             <div class="mb-3.5 flex items-center justify-between gap-2">
               <span
-                class="rounded px-1.5 py-1 text-xs"
+                class="rounded-full px-2 py-1 text-xs font-medium"
                 :class="priorityColors[task.priority]"
                 >{{
                   PRIORITIES.find(
@@ -289,33 +292,33 @@ function clearFilters() {
             </div>
             <button
               type="button"
-              class="mt-0 mr-0 mb-2.5 ml-0 block min-h-10 max-w-full cursor-pointer border-0 bg-transparent p-0 text-left text-sm font-semibold leading-[1.7] text-ink wrap-anywhere hover:text-brand [&>.el-icon]:mr-1.5 [&>.el-icon]:text-success"
+              class="ui-interactive mt-0 mr-0 mb-2.5 ml-0 block min-h-11 max-w-full cursor-pointer border-0 bg-transparent p-0 text-left text-base font-semibold leading-7 text-ink wrap-anywhere hover:text-brand [&>.el-icon]:mr-1.5 [&>.el-icon]:text-success"
               :disabled="Boolean(busyId)"
               @click="edit(task)"
             >
-              <el-icon v-if="task.status === 'done'"><CircleCheck /></el-icon
+              <el-icon v-if="task.status === 'done'" aria-hidden="true"><CircleCheck /></el-icon
               >{{ task.title }}
             </button>
             <p
               v-if="task.description"
-              class="mb-3.5 line-clamp-3 text-xs leading-[1.85] whitespace-pre-wrap text-muted wrap-anywhere"
+              class="mb-3 line-clamp-3 text-sm leading-7 whitespace-pre-wrap text-muted wrap-anywhere"
             >
               {{ task.description }}
             </p>
             <details
               v-if="task.acceptance_criteria"
-              class="my-3 text-xs text-muted [&>summary]:min-h-10 [&>summary]:cursor-pointer [&>summary]:py-2.5 [&>p]:mt-[9px] [&>p]:mb-0 [&>p]:rounded-[5px] [&>p]:bg-canvas [&>p]:p-2.5 [&>p]:leading-[1.9] [&>p]:whitespace-pre-wrap [&>p]:wrap-anywhere"
+              class="my-2 text-sm text-muted [&>p]:mt-2 [&>p]:mb-3 [&>p]:rounded-lg [&>p]:bg-canvas [&>p]:p-3 [&>p]:leading-7 [&>p]:whitespace-pre-wrap [&>p]:wrap-anywhere"
             >
-              <summary>查看验收标准</summary>
-              <p>{{ task.acceptance_criteria }}</p>
+              <summary class="ui-interactive min-h-11 cursor-pointer py-3 hover:text-brand">查看验收标准</summary>
+              <p class="ui-enter">{{ task.acceptance_criteria }}</p>
             </details>
             <footer
-              class="mt-3.5 flex items-center justify-between gap-2 border-t border-line pt-2 [&_.el-button]:min-h-10 [&_.el-button]:min-w-10 [&_.el-button]:text-sm [&_.el-button]:text-muted"
+              class="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-line/65 pt-2 [&_.el-button]:min-h-11 [&_.el-button]:min-w-11 [&_.el-button]:text-sm [&_.el-button]:text-muted"
             >
               <select
                 :value="task.status"
                 :aria-label="`修改任务 ${task.title} 的状态`"
-                class="min-h-10 max-w-[110px] cursor-pointer rounded-[5px] border border-line bg-canvas p-1.5 text-xs text-muted focus-visible:outline-2 focus-visible:outline-focus focus-visible:outline-offset-2 disabled:cursor-wait disabled:opacity-60"
+                class="ui-interactive min-h-11 max-w-[110px] cursor-pointer rounded-lg border-0 bg-canvas p-2 text-xs text-muted hover:bg-raised focus-visible:outline-2 focus-visible:outline-focus focus-visible:outline-offset-2 disabled:cursor-wait disabled:opacity-60"
                 :disabled="Boolean(busyId)"
                 @change="move(task, $event)"
               >
@@ -330,6 +333,7 @@ function clearFilters() {
               <div class="flex gap-2 [&>.el-button+.el-button]:ml-0">
                 <el-button
                   :icon="Edit"
+                  class="ui-interactive"
                   text
                   circle
                   :aria-label="`编辑任务 ${task.title}`"
@@ -337,6 +341,7 @@ function clearFilters() {
                   @click="edit(task)"
                 /><el-button
                   :icon="Delete"
+                  class="ui-interactive"
                   text
                   circle
                   :aria-label="`删除任务 ${task.title}`"
@@ -348,7 +353,7 @@ function clearFilters() {
           </article>
           <el-skeleton
             v-if="columns[column.status].loading"
-            class="rounded-[9px] bg-raised p-4"
+            class="rounded-xl bg-surface p-4"
             :rows="3"
             animated
           />
@@ -360,6 +365,7 @@ function clearFilters() {
             <p>{{ columns[column.status].error }}</p>
             <el-button
               size="small"
+              class="ui-interactive min-h-11!"
               @click="
                 loadColumn(
                   column.status,
@@ -374,13 +380,13 @@ function clearFilters() {
             class="px-2.5 py-[30px] text-center text-xs text-muted"
           >
             <span
-              class="mx-auto mb-[18px] grid size-[34px] place-items-center rounded-[9px] border border-dashed border-line"
+              class="mx-auto mb-4 grid size-10 place-items-center rounded-xl bg-surface/70 text-lg"
               >—</span
             >
             <p>
               {{ priorityFilter ? "没有符合筛选条件的任务" : "这里还没有任务" }}
             </p>
-            <el-button text size="small" @click="create(column.status)"
+            <el-button text size="small" class="ui-interactive min-h-11!" @click="create(column.status)"
               >添加一个任务</el-button
             >
           </div>
@@ -388,7 +394,7 @@ function clearFilters() {
             v-else-if="
               columns[column.status].nextOffset < columns[column.status].total
             "
-            class="min-h-10! w-full border-dashed bg-transparent text-xs"
+            class="ui-interactive min-h-11! w-full border-0! bg-transparent text-xs"
             :disabled="Boolean(busyId)"
             @click="loadColumn(column.status, true)"
             >加载更多（已显示 {{ columns[column.status].items.length }} /

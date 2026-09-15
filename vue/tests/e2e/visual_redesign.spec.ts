@@ -44,36 +44,69 @@ test("登录页3D可暂停，减少动态后保留静态画面", async ({ page }
   await expect(scene.locator("canvas")).toHaveCSS("opacity", "1", { timeout: 10000 });
   await page.getByRole("button", { name: "暂停装饰动画", exact: true }).click();
   await expect(page.getByRole("button", { name: "播放装饰动画", exact: true })).toBeVisible();
-  await page.screenshot({ path: "test-results/screenshots/redesign-login.png", fullPage: true });
+  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  const pausedAlpha = await scene.locator("canvas").evaluate((element) => {
+    const canvas = element as HTMLCanvasElement;
+    const gl = canvas.getContext("webgl2")!;
+    const pixel = new Uint8Array(4);
+    gl.readPixels(Math.floor(canvas.width / 2), Math.floor(canvas.height / 2), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+    return pixel[3];
+  });
+  expect(pausedAlpha).toBeGreaterThan(0);
+  await page.screenshot({ animations: "disabled", path: "test-results/screenshots/redesign-login.png", fullPage: true });
   await page.emulateMedia({ reducedMotion: "reduce" });
   await expect(page.getByRole("button", { name: /装饰动画/ })).toHaveCount(0);
   await expect(page.getByText("已减少动态")).toBeVisible();
   expect(errors).toEqual([]);
 });
 
-test("深色项目与聊天空态，输入框在双端首屏可达", async ({ page }) => {
+test("浅色项目与聊天空态，输入框在双端首屏可达", async ({ page }) => {
   await workspace(page);
-  await page.setViewportSize({ width: 1440, height: 1000 });
+  await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/projects");
   await expect(page.getByRole("heading", { name: "餐厅外卖网站", exact: true })).toBeVisible();
-  await page.screenshot({ path: "test-results/screenshots/redesign-projects.png", fullPage: true });
+  await expect(page.locator("html")).toHaveCSS("color-scheme", "light");
+  await expect(page.locator("body")).toHaveCSS("font-family", /Microsoft YaHei/);
+  await page.screenshot({ animations: "disabled", path: "test-results/screenshots/redesign-projects.png", fullPage: true });
   await page.goto(`/projects/${projectId}?tab=chat`);
   const input = page.getByLabel("你想了解什么？");
   await expect(input).toBeEnabled();
   await expect(page.getByTestId("ai-presence").locator("canvas")).toHaveCSS("opacity", "1", { timeout: 10000 });
   await page.getByRole("button", { name: "暂停装饰动画", exact: true }).click();
-  await page.screenshot({ path: "test-results/screenshots/redesign-chat-empty.png", fullPage: true });
+  await expect(page.getByRole("button", { name: "播放装饰动画", exact: true })).toBeVisible();
+  // 等待暂停状态及可见画布完成合成；只检查 WebGL 缓冲区会漏掉页面截图中的空白。
+  await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
+  const presenceBounds = (await page.getByTestId("ai-presence").boundingBox())!;
+  const chatScreenshot = await page.screenshot({ animations: "disabled", path: "test-results/screenshots/redesign-chat-empty.png", fullPage: true });
+  const visiblePresencePixel = await page.evaluate(async ({ screenshot, bounds }) => {
+    const image = new Image();
+    image.src = `data:image/png;base64,${screenshot}`;
+    await image.decode();
+    const canvas = document.createElement("canvas");
+    canvas.width = image.width;
+    canvas.height = image.height;
+    const context = canvas.getContext("2d")!;
+    context.drawImage(image, 0, 0);
+    return Array.from(context.getImageData(
+      Math.floor(bounds.x + bounds.width / 2 + window.scrollX),
+      Math.floor(bounds.y + bounds.height / 2 + window.scrollY),
+      1, 1,
+    ).data);
+  }, { screenshot: chatScreenshot.toString("base64"), bounds: presenceBounds });
+  expect(visiblePresencePixel[0]).toBeLessThan(235);
+  expect(visiblePresencePixel[2] - visiblePresencePixel[0]).toBeGreaterThan(10);
   await expect(input).toBeInViewport();
   await input.fill("顾客下单之前，需要校验哪些信息？");
   await page.getByRole("button", { name: "发送问题", exact: true }).click();
   await expect(page.getByRole("heading", { name: "下单前需要确认三件事" })).toBeVisible();
-  await page.screenshot({ path: "test-results/screenshots/redesign-chat-answer.png", fullPage: true });
+  await expect(page.getByRole("heading", { name: "下单前需要确认三件事" })).toHaveCSS("font-size", "17px");
+  await page.screenshot({ animations: "disabled", path: "test-results/screenshots/redesign-chat-answer.png", fullPage: true });
   await page.setViewportSize({ width: 375, height: 812 });
   await page.evaluate(() => window.scrollTo(0, 0));
   await expect(input).toBeInViewport();
   await expect(page.getByRole("button", { name: "发送问题", exact: true })).toBeInViewport();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
-  await page.screenshot({ path: "test-results/screenshots/redesign-chat-mobile.png", fullPage: true });
+  await page.screenshot({ animations: "disabled", path: "test-results/screenshots/redesign-chat-mobile.png", fullPage: true });
 });
 
 test("规划左右工作区与无WebGL降级不阻断业务", async ({ page }) => {
@@ -86,13 +119,54 @@ test("规划左右工作区与无WebGL降级不阻断业务", async ({ page }) =
     } as typeof getContext;
   });
   await page.setViewportSize({ width: 1440, height: 1000 });
-  await page.goto(`/projects/${projectId}?tab=planning`);
+  await page.goto(`/projects/${projectId}?tab=chat`);
   await expect(page.getByTestId("ai-presence-fallback")).toBeVisible();
+  await expect(page.getByLabel("你想了解什么？")).toBeEnabled();
+  await page.getByRole("link", { name: "任务规划", exact: true }).click();
   await expect(page.getByLabel("你想完成什么目标？")).toBeEnabled();
-  await page.screenshot({ path: "test-results/screenshots/redesign-planning-empty.png", fullPage: true });
+  await page.screenshot({ animations: "disabled", path: "test-results/screenshots/redesign-planning-empty.png", fullPage: true });
   await page.getByLabel("你想完成什么目标？").fill("完善顾客下单流程，覆盖信息校验、库存检查和异常处理。");
   await page.getByRole("button", { name: "生成任务草案", exact: true }).click();
   await expect(page.getByRole("region", { name: "任务方案预览" })).toBeVisible();
-  await page.screenshot({ path: "test-results/screenshots/redesign-planning-result.png", fullPage: true });
+  await page.screenshot({ animations: "disabled", path: "test-results/screenshots/redesign-planning-result.png", fullPage: true });
   await expect(page.getByRole("button", { name: "重新生成草案", exact: true })).toBeInViewport();
+});
+
+test("布局切换、快速标签切换与减少动态模式保持可操作", async ({ page }) => {
+  await workspace(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/projects");
+  const first = page.getByRole("article").filter({ has: page.getByRole("heading", { name: "餐厅外卖网站", exact: true }) });
+  await expect(first).toBeVisible();
+  const gridWidth = (await first.boundingBox())!.width;
+  await page.getByRole("button", { name: "列表视图", exact: true }).click();
+  await expect(page.getByRole("button", { name: "列表视图", exact: true })).toHaveAttribute("aria-pressed", "true");
+  await expect.poll(async () => (await first.boundingBox())!.width).toBeGreaterThan(gridWidth);
+  await page.screenshot({ animations: "disabled", path: "test-results/screenshots/redesign-projects-list.png", fullPage: true });
+  for (const width of [700, 768]) {
+    await page.setViewportSize({ width, height: 900 });
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.getByRole("button", { name: "收起侧栏", exact: true }).click();
+  await expect(page.getByRole("button", { name: "展开侧栏", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "展开侧栏", exact: true })).toBeFocused();
+  await page.getByRole("button", { name: "展开侧栏", exact: true }).click();
+  await expect(page.getByRole("button", { name: "收起侧栏", exact: true })).toBeVisible();
+  await expect(page.getByRole("button", { name: "收起侧栏", exact: true })).toBeFocused();
+  await page.goto(`/projects/${projectId}?tab=chat`);
+  const tabs = page.getByRole("navigation", { name: "项目功能" });
+  await tabs.getByRole("link", { name: "任务规划", exact: true }).click();
+  await tabs.getByRole("link", { name: "项目概览", exact: true }).click();
+  await tabs.getByRole("link", { name: "AI 问答", exact: true }).click();
+  await expect(page.getByLabel("你想了解什么？")).toBeEnabled();
+  await expect(tabs.getByRole("link", { name: "AI 问答", exact: true })).toHaveAttribute("aria-current", "page");
+  await page.emulateMedia({ reducedMotion: "reduce" });
+  await expect(tabs.locator(":scope > span")).toHaveCSS("transition-duration", "0s");
+  await page.setViewportSize({ width: 812, height: 375 });
+  await expect(page.getByLabel("你想了解什么？")).toBeEnabled();
+  await page.getByLabel("你想了解什么？").fill("项目有哪些需求？");
+  await page.getByRole("button", { name: "发送问题", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "下单前需要确认三件事" })).toBeVisible();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
 });

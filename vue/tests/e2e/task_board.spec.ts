@@ -352,30 +352,32 @@ test("桌面与手机看板和表单布局", async ({ page }) => {
   // 不只检查元素存在，还验证打包后的动态颜色和布局确实生效。
   await expect(
     page.getByRole("button", { name: "新建任务", exact: true }),
-  ).toHaveCSS("background-color", "rgb(140, 207, 255)");
-  await expect(column(page, "待办").locator("header")).toHaveCSS(
-    "border-top-color",
+  ).toHaveCSS("background-color", "rgb(54, 94, 234)");
+  await expect(page.getByRole("button", { name: "新建任务", exact: true })).toHaveCSS("color", "rgb(255, 255, 255)");
+  await expect(card(page, "完成购物车页面")).toHaveCSS("background-color", "rgb(255, 255, 255)");
+  await expect(column(page, "待办").locator("header h3 > span").first()).toHaveCSS(
+    "background-color",
     "rgb(148, 167, 182)",
   );
-  await expect(column(page, "进行中").locator("header")).toHaveCSS(
-    "border-top-color",
+  await expect(column(page, "进行中").locator("header h3 > span").first()).toHaveCSS(
+    "background-color",
     "rgb(215, 160, 81)",
   );
-  await expect(column(page, "已完成").locator("header")).toHaveCSS(
-    "border-top-color",
+  await expect(column(page, "已完成").locator("header h3 > span").first()).toHaveCSS(
+    "background-color",
     "rgb(77, 165, 141)",
   );
   await expect(
     card(page, "完成购物车页面").getByText("P1 · 最高", { exact: true }),
-  ).toHaveCSS("color", "rgb(255, 181, 174)");
+  ).toHaveCSS("color", "rgb(186, 52, 76)");
   await expect(
     card(page, "补充支付流程的验收标准").getByText("P2 · 较高", {
       exact: true,
     }),
-  ).toHaveCSS("color", "rgb(240, 205, 140)");
+  ).toHaveCSS("color", "rgb(150, 97, 22)");
   await expect(
     card(page, "绘制订单页面原型").getByText("P3 · 普通", { exact: true }),
-  ).toHaveCSS("color", "rgb(140, 207, 255)");
+  ).toHaveCSS("color", "rgb(54, 94, 234)");
   const desktopBoxes = await page
     .getByTestId("task-column")
     .evaluateAll((elements) =>
@@ -391,7 +393,7 @@ test("桌面与手机看板和表单布局", async ({ page }) => {
     path: "test-results/screenshots/task-board-desktop.png",
     fullPage: true,
   });
-  await page.setViewportSize({ width: 390, height: 844 });
+  await page.setViewportSize({ width: 375, height: 844 });
   const mobileBoxes = await page
     .getByTestId("task-column")
     .evaluateAll((elements) =>
@@ -417,6 +419,7 @@ test("桌面与手机看板和表单布局", async ({ page }) => {
     page.getByRole("button", { name: "创建任务", exact: true }),
   ).toBeVisible();
   await expect(page.getByRole("dialog")).toHaveCSS("opacity", "1");
+  expect((await page.getByRole("button", { name: "创建任务", exact: true }).boundingBox())!.height).toBeGreaterThanOrEqual(44);
   expect(
     await page.evaluate(
       () => document.documentElement.scrollWidth <= window.innerWidth,

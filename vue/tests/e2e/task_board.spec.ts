@@ -352,7 +352,7 @@ test("桌面与手机看板和表单布局", async ({ page }) => {
   // 不只检查元素存在，还验证打包后的动态颜色和布局确实生效。
   await expect(
     page.getByRole("button", { name: "新建任务", exact: true }),
-  ).toHaveCSS("background-color", "rgb(8, 127, 115)");
+  ).toHaveCSS("background-color", "rgb(140, 207, 255)");
   await expect(column(page, "待办").locator("header")).toHaveCSS(
     "border-top-color",
     "rgb(148, 167, 182)",
@@ -367,15 +367,15 @@ test("桌面与手机看板和表单布局", async ({ page }) => {
   );
   await expect(
     card(page, "完成购物车页面").getByText("P1 · 最高", { exact: true }),
-  ).toHaveCSS("color", "rgb(179, 84, 67)");
+  ).toHaveCSS("color", "rgb(255, 181, 174)");
   await expect(
     card(page, "补充支付流程的验收标准").getByText("P2 · 较高", {
       exact: true,
     }),
-  ).toHaveCSS("color", "rgb(172, 128, 60)");
+  ).toHaveCSS("color", "rgb(240, 205, 140)");
   await expect(
     card(page, "绘制订单页面原型").getByText("P3 · 普通", { exact: true }),
-  ).toHaveCSS("color", "rgb(84, 118, 167)");
+  ).toHaveCSS("color", "rgb(140, 207, 255)");
   const desktopBoxes = await page
     .getByTestId("task-column")
     .evaluateAll((elements) =>

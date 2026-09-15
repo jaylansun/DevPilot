@@ -60,13 +60,13 @@ async function save() {
     :show-close="!saving"
     @update:model-value="emit('update:modelValue', $event)"
   >
-    <p class="mb-7 text-[13px] text-[#80919d]">
+    <p class="mb-7 text-sm leading-7 text-muted">
       给项目起个名字，写下你想完成的目标。
     </p>
     <form id="project-form" @submit.prevent="save">
       <div class="ui-field">
         <label for="project-name"
-          >项目名称 <span class="text-[#b75849]">*</span></label
+          >项目名称 <span class="text-danger">*</span></label
         ><el-input
           id="project-name"
           v-model="form.name"

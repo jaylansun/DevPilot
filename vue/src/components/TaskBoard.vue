@@ -22,11 +22,11 @@ const columnColors: Record<TaskStatus, string> = {
   done: "[--column-color:#4da58d]",
 };
 const priorityColors: Record<number, string> = {
-  1: "bg-[#fbece9] text-[#b35443]",
-  2: "bg-[#fcf1df] text-[#ac803c]",
-  3: "bg-[#ebf1fa] text-[#5476a7]",
-  4: "bg-[#eef2f4] text-[#788b97]",
-  5: "bg-[#eef2f4] text-[#788b97]",
+  1: "bg-danger/10 text-danger",
+  2: "bg-warning/10 text-warning",
+  3: "bg-brand/10 text-brand",
+  4: "bg-surface text-muted",
+  5: "bg-surface text-muted",
 };
 
 const props = defineProps<{ projectId: string }>();
@@ -134,7 +134,7 @@ function clearFilters() {
 <template>
   <section aria-label="任务看板">
     <div
-      class="mb-6 flex items-center justify-between gap-5 [&_h2]:mb-2 [&_h2]:text-[19px] [&_p]:m-0 [&_p]:text-xs [&_p]:leading-[1.8] [&_p]:text-[#7e8d98] max-mobile:flex-wrap max-mobile:items-start max-mobile:gap-3.5 max-mobile:[&_h2]:text-[17px]"
+      class="mb-6 flex items-center justify-between gap-5 [&_h2]:mb-2 [&_h2]:text-[19px] [&_p]:m-0 [&_p]:text-xs [&_p]:leading-[1.8] [&_p]:text-muted max-mobile:flex-wrap max-mobile:items-start max-mobile:gap-3.5 max-mobile:[&_h2]:text-[17px]"
     >
       <div>
         <h2>把目标，变成下一步行动</h2>
@@ -152,7 +152,7 @@ function clearFilters() {
       class="mb-[22px] flex flex-wrap items-end justify-between gap-[18px] max-mobile:items-start"
     >
       <div class="flex flex-wrap items-end gap-3">
-        <div class="flex flex-col gap-2 text-[11px] text-[#728693]">
+        <div class="flex flex-col gap-2 text-xs text-muted">
           <label for="board-status-filter">状态筛选</label
           ><select
             id="board-status-filter"
@@ -170,7 +170,7 @@ function clearFilters() {
             </option>
           </select>
         </div>
-        <div class="flex flex-col gap-2 text-[11px] text-[#728693]">
+        <div class="flex flex-col gap-2 text-xs text-muted">
           <label for="board-priority-filter">优先级筛选</label
           ><select
             id="board-priority-filter"
@@ -197,7 +197,7 @@ function clearFilters() {
         >
       </div>
       <div
-        class="flex items-center gap-3.5 text-[11px] text-[#7d8f9a] max-mobile:w-full max-mobile:justify-between"
+        class="flex items-center gap-3.5 text-xs text-muted max-mobile:w-full max-mobile:justify-between"
       >
         <span role="status">{{
           loading
@@ -235,21 +235,21 @@ function clearFilters() {
       <section
         v-for="column in visibleColumns"
         :key="column.status"
-        class="min-w-0 overflow-hidden rounded-xl border border-[#e2e8ec] bg-[#edf1f4]"
+        class="min-w-0 overflow-hidden rounded-xl border border-line bg-surface"
         :class="columnColors[column.status]"
         data-testid="task-column"
         :aria-label="`${column.label}任务`"
         :aria-busy="columns[column.status].loading"
       >
         <header
-          class="flex items-center justify-between border-t-[3px] [border-top-color:var(--column-color)] px-4 py-[18px] [&_h3]:mt-0 [&_h3]:mb-2 [&_h3]:flex [&_h3]:items-center [&_h3]:gap-2 [&_h3]:text-[13px] [&_p]:m-0 [&_p]:text-[10px] [&_p]:text-[#8797a1]"
+          class="flex items-center justify-between border-t-[3px] [border-top-color:var(--column-color)] px-4 py-[18px] [&_h3]:mt-0 [&_h3]:mb-2 [&_h3]:flex [&_h3]:items-center [&_h3]:gap-2 [&_h3]:text-sm [&_p]:m-0 [&_p]:text-xs [&_p]:text-muted"
         >
           <div>
             <h3>
               <span class="size-[7px] rounded-full bg-(--column-color)" />{{
                 column.label
               }}<span
-                class="rounded-[5px] bg-[#dfe6eb] px-1.5 py-0.5 text-[10px] text-[#657e8d]"
+                class="rounded-[5px] bg-raised px-1.5 py-0.5 text-xs text-muted"
                 >{{ columns[column.status].total }}</span
               >
             </h3>
@@ -257,6 +257,7 @@ function clearFilters() {
           </div>
           <el-button
             :icon="Plus"
+            class="min-h-10! min-w-10!"
             text
             circle
             :aria-label="`新建${column.label}任务`"
@@ -270,25 +271,25 @@ function clearFilters() {
           <article
             v-for="task in columns[column.status].items"
             :key="task.id"
-            class="min-w-0 rounded-[9px] border border-[#e0e7ec] bg-white px-3.5 pt-4 pb-2.5 shadow-[0_2px_3px_#173a4810]"
+            class="min-w-0 rounded-[9px] border border-line bg-raised px-3.5 pt-4 pb-2.5"
             :aria-label="task.title"
           >
             <div class="mb-3.5 flex items-center justify-between gap-2">
               <span
-                class="rounded px-1.5 py-1 text-[10px]"
+                class="rounded px-1.5 py-1 text-xs"
                 :class="priorityColors[task.priority]"
                 >{{
                   PRIORITIES.find(
                     (priority) => priority.value === task.priority,
                   )?.label
                 }}</span
-              ><span class="text-[10px] text-[#8da0aa]">{{
+              ><span class="text-xs text-muted">{{
                 task.source === "ai" ? "AI 生成" : "手工创建"
               }}</span>
             </div>
             <button
               type="button"
-              class="mt-0 mr-0 mb-2.5 ml-0 block max-w-full cursor-pointer border-0 bg-transparent p-0 text-left text-sm font-semibold leading-[1.7] text-[#2d4654] wrap-anywhere hover:text-brand [&>.el-icon]:mr-1.5 [&>.el-icon]:text-[#42967f]"
+              class="mt-0 mr-0 mb-2.5 ml-0 block min-h-10 max-w-full cursor-pointer border-0 bg-transparent p-0 text-left text-sm font-semibold leading-[1.7] text-ink wrap-anywhere hover:text-brand [&>.el-icon]:mr-1.5 [&>.el-icon]:text-success"
               :disabled="Boolean(busyId)"
               @click="edit(task)"
             >
@@ -297,24 +298,24 @@ function clearFilters() {
             </button>
             <p
               v-if="task.description"
-              class="mb-3.5 line-clamp-3 text-[11px] leading-[1.85] whitespace-pre-wrap text-[#81919b] wrap-anywhere"
+              class="mb-3.5 line-clamp-3 text-xs leading-[1.85] whitespace-pre-wrap text-muted wrap-anywhere"
             >
               {{ task.description }}
             </p>
             <details
               v-if="task.acceptance_criteria"
-              class="my-3 text-[11px] text-[#718691] [&>summary]:cursor-pointer [&>p]:mt-[9px] [&>p]:mb-0 [&>p]:rounded-[5px] [&>p]:bg-[#f6f9f9] [&>p]:p-2.5 [&>p]:leading-[1.9] [&>p]:whitespace-pre-wrap [&>p]:wrap-anywhere"
+              class="my-3 text-xs text-muted [&>summary]:min-h-10 [&>summary]:cursor-pointer [&>summary]:py-2.5 [&>p]:mt-[9px] [&>p]:mb-0 [&>p]:rounded-[5px] [&>p]:bg-canvas [&>p]:p-2.5 [&>p]:leading-[1.9] [&>p]:whitespace-pre-wrap [&>p]:wrap-anywhere"
             >
               <summary>查看验收标准</summary>
               <p>{{ task.acceptance_criteria }}</p>
             </details>
             <footer
-              class="mt-3.5 flex items-center justify-between gap-1.5 border-t border-[#edf1f3] pt-2 [&_.el-button]:size-7 [&_.el-button]:text-[13px] [&_.el-button]:text-[#859aa5]"
+              class="mt-3.5 flex items-center justify-between gap-2 border-t border-line pt-2 [&_.el-button]:min-h-10 [&_.el-button]:min-w-10 [&_.el-button]:text-sm [&_.el-button]:text-muted"
             >
               <select
                 :value="task.status"
                 :aria-label="`修改任务 ${task.title} 的状态`"
-                class="max-w-[110px] rounded-[5px] border-0 bg-[#f2f6f6] p-1.5 text-[11px] text-[#5c7884] focus-visible:outline-2 focus-visible:outline-focus focus-visible:outline-offset-2 disabled:cursor-wait disabled:opacity-60"
+                class="min-h-10 max-w-[110px] cursor-pointer rounded-[5px] border border-line bg-canvas p-1.5 text-xs text-muted focus-visible:outline-2 focus-visible:outline-focus focus-visible:outline-offset-2 disabled:cursor-wait disabled:opacity-60"
                 :disabled="Boolean(busyId)"
                 @change="move(task, $event)"
               >
@@ -326,7 +327,7 @@ function clearFilters() {
                   {{ target.label }}
                 </option>
               </select>
-              <div class="flex [&>.el-button+.el-button]:ml-0.5">
+              <div class="flex gap-2 [&>.el-button+.el-button]:ml-0">
                 <el-button
                   :icon="Edit"
                   text
@@ -347,13 +348,13 @@ function clearFilters() {
           </article>
           <el-skeleton
             v-if="columns[column.status].loading"
-            class="rounded-[9px] bg-white p-4"
+            class="rounded-[9px] bg-raised p-4"
             :rows="3"
             animated
           />
           <div
             v-else-if="columns[column.status].error"
-            class="px-2.5 py-5 text-xs leading-[1.8] text-[#a05648]"
+            class="px-2.5 py-5 text-xs leading-[1.8] text-danger"
             role="alert"
           >
             <p>{{ columns[column.status].error }}</p>
@@ -370,10 +371,10 @@ function clearFilters() {
           </div>
           <div
             v-else-if="!columns[column.status].items.length"
-            class="px-2.5 py-[30px] text-center text-[11px] text-[#8fa0aa]"
+            class="px-2.5 py-[30px] text-center text-xs text-muted"
           >
             <span
-              class="mx-auto mb-[18px] grid size-[34px] place-items-center rounded-[9px] border border-dashed border-[#bdcbd2]"
+              class="mx-auto mb-[18px] grid size-[34px] place-items-center rounded-[9px] border border-dashed border-line"
               >—</span
             >
             <p>
@@ -387,7 +388,7 @@ function clearFilters() {
             v-else-if="
               columns[column.status].nextOffset < columns[column.status].total
             "
-            class="w-full border-dashed bg-transparent text-[11px]"
+            class="min-h-10! w-full border-dashed bg-transparent text-xs"
             :disabled="Boolean(busyId)"
             @click="loadColumn(column.status, true)"
             >加载更多（已显示 {{ columns[column.status].items.length }} /
@@ -396,7 +397,7 @@ function clearFilters() {
         </div>
       </section>
     </div>
-    <p class="mt-5 mb-0 text-[11px] leading-[1.8] text-[#8b9ca6]">
+    <p class="mt-5 mb-0 text-xs leading-[1.8] text-muted">
       任务修改会保存到当前项目。点击任务标题可查看完整内容或编辑。
     </p>
     <TaskDialog

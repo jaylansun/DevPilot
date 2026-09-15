@@ -24,12 +24,12 @@ let generation = 0;
 let pollTimer: ReturnType<typeof setTimeout> | undefined;
 
 const statuses: Record<DocumentStatus, { label: string; color: string }> = {
-  queued: { label: "等待索引", color: "bg-slate-100 text-slate-600" },
-  indexing: { label: "正在索引", color: "bg-amber-50 text-amber-700" },
-  ready: { label: "已就绪", color: "bg-emerald-50 text-emerald-700" },
-  failed: { label: "索引失败", color: "bg-red-50 text-red-700" },
-  deleting: { label: "正在删除", color: "bg-slate-100 text-slate-600" },
-  delete_failed: { label: "删除失败", color: "bg-red-50 text-red-700" },
+  queued: { label: "等待索引", color: "bg-raised text-muted" },
+  indexing: { label: "正在索引", color: "bg-warning/10 text-warning" },
+  ready: { label: "已就绪", color: "bg-success/10 text-success" },
+  failed: { label: "索引失败", color: "bg-danger/10 text-danger" },
+  deleting: { label: "正在删除", color: "bg-raised text-muted" },
+  delete_failed: { label: "删除失败", color: "bg-danger/10 text-danger" },
 };
 const readyCount = computed(
   () => documents.value.filter((doc) => doc.status === "ready").length,
@@ -151,7 +151,7 @@ onBeforeUnmount(() => {
     <div class="ui-panel">
       <div class="flex items-start gap-4 max-mobile:flex-col">
         <span
-          class="grid size-12 shrink-0 place-items-center rounded-xl bg-emerald-50 text-2xl text-brand"
+          class="grid size-12 shrink-0 place-items-center rounded-xl bg-brand/10 text-2xl text-brand"
         >
           <el-icon><UploadFilled /></el-icon>
         </span>
@@ -178,20 +178,21 @@ onBeforeUnmount(() => {
           type="file"
           accept=".md,.txt"
           aria-label="选择知识库文档"
-          class="min-w-0 flex-1 rounded-lg border border-slate-200 p-3 text-sm text-muted file:mr-3 file:cursor-pointer file:rounded-md file:border-0 file:bg-canvas file:px-3 file:py-2 file:text-brand"
+          class="min-w-0 flex-1 rounded-lg border border-line bg-canvas p-3 text-sm text-muted file:mr-3 file:min-h-10 file:cursor-pointer file:rounded-md file:border-0 file:bg-raised file:px-3 file:py-2 file:text-brand"
           :disabled="uploading"
           @change="chooseFile"
         />
         <el-button
           native-type="submit"
           type="primary"
+          class="min-h-11!"
           :loading="uploading"
           :disabled="loading || documents.length >= 20 || !selectedFile"
           >上传文档</el-button
         >
       </form>
       <div
-        class="mt-5 rounded-lg bg-amber-50 px-4 py-3 text-xs leading-6 text-amber-800"
+        class="mt-5 rounded-lg border border-warning/25 bg-warning/10 px-4 py-3 text-xs leading-6 text-warning"
       >
         首次索引需要下载本地中文向量模型，可能需要几分钟；之后会复用缓存。
         向量化在服务器本地完成，无需填写大模型 API Key。索引就绪后可进入“AI
@@ -205,7 +206,7 @@ onBeforeUnmount(() => {
       role="alert"
     >
       <span>{{ error }}</span>
-      <el-button size="small" @click="load()">重新加载列表</el-button>
+      <el-button size="small" class="min-h-10!" @click="load()">重新加载列表</el-button>
     </div>
     <div class="flex items-center justify-between gap-3">
       <h2 class="m-0 text-base">
@@ -217,6 +218,7 @@ onBeforeUnmount(() => {
       <el-button
         text
         :icon="Refresh"
+        class="min-h-10!"
         :loading="loading"
         :disabled="uploading || !!workingId"
         aria-label="刷新知识库"
@@ -270,16 +272,17 @@ onBeforeUnmount(() => {
           正在清理文档向量，完成后会自动移除。
         </p>
         <div
-          class="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-slate-100 pt-3"
+          class="mt-4 flex flex-wrap items-center justify-between gap-2 border-t border-line pt-3"
         >
           <time :datetime="doc.created_at" class="text-xs text-muted">{{
             new Date(doc.created_at).toLocaleString("zh-CN", { hour12: false })
           }}</time>
-          <div>
+          <div class="flex gap-2 [&>.el-button+.el-button]:ml-0">
             <el-button
               v-if="doc.status === 'failed' || doc.status === 'delete_failed'"
               text
               type="primary"
+              class="min-h-10!"
               :disabled="!!workingId || uploading"
               :aria-label="'重试文档 ' + doc.filename"
               @click="operate(doc, false)"
@@ -288,6 +291,7 @@ onBeforeUnmount(() => {
             <el-button
               text
               type="danger"
+              class="min-h-10!"
               :disabled="doc.status === 'deleting' || !!workingId || uploading"
               :aria-label="'删除文档 ' + doc.filename"
               @click="operate(doc, true)"

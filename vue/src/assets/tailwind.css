@@ -1,17 +1,24 @@
-/* 样式层顺序：组件库在前，项目公共组件和工具类在后。保留现有基础行为，不引入 Preflight。 */
+/* 组件库在前、公共模式和 Tailwind 工具类在后，保留现有表单行为。 */
 @layer theme, base, element-plus, components, utilities;
 @import "tailwindcss/theme.css" layer(theme);
 @import "element-plus/dist/index.css" layer(element-plus);
+@import "element-plus/theme-chalk/dark/css-vars.css" layer(element-plus);
 @import "tailwindcss/utilities.css" layer(utilities) source("../");
 
 @theme {
-  --font-sans: "Inter", "PingFang SC", "Microsoft YaHei", sans-serif;
-  --color-brand: #087f73;
-  --color-ink: #1d3040;
-  --color-muted: #73818d;
-  --color-canvas: #f6f8fa;
-  --color-sidebar: #112f39;
-  --color-focus: #20aa98;
+  --font-sans: "Segoe UI Variable", "Segoe UI", "Microsoft YaHei UI", "PingFang SC", sans-serif;
+  --color-brand: #8ccfff;
+  --color-ink: #edf3fc;
+  --color-muted: #a8b6ca;
+  --color-canvas: #0b1019;
+  --color-sidebar: #0c121d;
+  --color-surface: #141c2a;
+  --color-raised: #1c2738;
+  --color-line: #34445b;
+  --color-focus: #8ccfff;
+  --color-danger: #ffb5ae;
+  --color-success: #8bdfbc;
+  --color-warning: #f0cd8c;
   --breakpoint-*: initial;
   --breakpoint-mobile: 680px;
   --breakpoint-tablet: 850px;
@@ -24,52 +31,26 @@
   :root {
     @apply font-sans text-ink bg-canvas;
     font-synthesis: none;
+    color-scheme: dark;
   }
-  *,
-  ::before,
-  ::after {
-    box-sizing: border-box;
+  *, ::before, ::after { box-sizing: border-box; }
+  body { @apply m-0 min-w-80; }
+  a { color: inherit; text-decoration: none; }
+  button, input, textarea, select { font: inherit; }
+  button { border: 0; background: transparent; color: inherit; }
+  button, a { -webkit-tap-highlight-color: transparent; }
+  button, summary { @apply cursor-pointer; }
+  button:disabled { @apply cursor-not-allowed; }
+  a:focus-visible, button:focus-visible, summary:focus-visible {
+    @apply outline-2 outline-focus outline-offset-4;
   }
-  body {
-    @apply m-0 min-w-80;
-  }
-  a {
-    color: inherit;
-    text-decoration: none;
-  }
-  button,
-  input,
-  textarea,
-  select {
-    font: inherit;
-  }
-  button,
-  a {
-    -webkit-tap-highlight-color: transparent;
-  }
-  a:focus-visible,
-  button:focus-visible {
-    @apply outline-3 outline-focus outline-offset-4;
-  }
-  h1,
-  h2,
-  h3,
-  p {
-    margin-top: 0;
-  }
-  h1 {
-    @apply mb-2.5 text-[30px] leading-[1.4] tracking-[-0.03em] max-mobile:text-[26px];
-  }
-  h2 {
-    @apply text-lg font-[650];
-  }
-  svg {
-    @apply size-[1em];
-  }
+  h1, h2, h3, p { margin-top: 0; }
+  h1 { @apply mb-2 text-[30px] leading-[1.35] tracking-tight max-mobile:text-[25px]; }
+  h2 { @apply text-lg font-semibold; }
+  svg { @apply size-[1em]; }
+  ::selection { @apply bg-brand/25 text-ink; }
   @media (prefers-reduced-motion: reduce) {
-    *,
-    ::before,
-    ::after {
+    *, ::before, ::after {
       transition-duration: 0s !important;
       animation-duration: 0s !important;
       scroll-behavior: auto !important;
@@ -77,80 +58,77 @@
   }
 }
 
-/* 只保留跨页面复用的模式与 Element Plus 适配；页面布局直接写在 Vue 模板中。 */
+/* 公共模式统一主题；具体页面布局全部保留在 Vue 的 Tailwind 类中。 */
 @layer components {
-  :root {
+  :root, html.dark {
     --el-color-primary: var(--color-brand);
-    --el-color-primary-light-3: #45a59b;
-    --el-color-primary-light-5: #7bbdb6;
-    --el-color-primary-light-7: #b0d8d3;
-    --el-color-primary-light-8: #d0e8e4;
-    --el-color-primary-light-9: #eef7f5;
-    --el-color-primary-dark-2: #06645b;
-    --el-border-radius-base: 8px;
+    --el-color-primary-light-3: #a5daff;
+    --el-color-primary-light-5: #42657f;
+    --el-color-primary-light-7: #2d465f;
+    --el-color-primary-light-8: #243a51;
+    --el-color-primary-light-9: #192d42;
+    --el-color-primary-dark-2: #62b6ee;
+    --el-color-success: var(--color-success);
+    --el-color-warning: var(--color-warning);
+    --el-color-danger: var(--color-danger);
+    --el-color-error: var(--color-danger);
+    --el-color-info: var(--color-muted);
+    --el-bg-color: var(--color-surface);
+    --el-bg-color-page: var(--color-canvas);
+    --el-bg-color-overlay: var(--color-raised);
+    --el-fill-color-blank: var(--color-surface);
+    --el-fill-color: var(--color-raised);
+    --el-fill-color-light: var(--color-raised);
+    --el-fill-color-lighter: #182231;
+    --el-fill-color-extra-light: #192431;
+    --el-fill-color-dark: #253349;
     --el-text-color-primary: var(--color-ink);
+    --el-text-color-regular: #c9d5e5;
+    --el-text-color-secondary: var(--color-muted);
+    --el-text-color-placeholder: #97a8c0;
+    --el-text-color-disabled: #78879a;
+    --el-border-color: var(--color-line);
+    --el-border-color-light: #2a394f;
+    --el-border-color-lighter: #27354a;
+    --el-border-color-extra-light: #223045;
+    --el-border-radius-base: 10px;
+    --el-mask-color: #0b1019d9;
+    --el-mask-color-extra-light: #0b101980;
   }
-  .ui-muted {
-    @apply text-sm text-muted leading-[1.8];
+  .el-button { @apply min-h-10 font-medium; }
+  .el-button.is-circle { @apply min-h-10 min-w-10; }
+  .el-button--primary:not(.is-text):not(.is-link):not(.is-plain) {
+    --el-button-text-color: #0b1019;
+    --el-button-hover-text-color: #0b1019;
+    --el-button-active-text-color: #0b1019;
+    --el-button-disabled-text-color: #0b1019;
   }
-  .ui-eyebrow {
-    @apply mb-3 text-xs font-semibold tracking-[0.08em] text-brand;
-  }
+  .el-message-box { @apply max-w-[calc(100vw-32px)]; }
+  .el-dialog__body { @apply text-ink; }
+  .el-input__wrapper, .el-textarea__inner { @apply transition-shadow duration-150; }
+  .ui-muted { @apply text-sm text-muted leading-[1.8]; }
+  .ui-eyebrow { @apply mb-3 text-xs font-medium text-brand; }
   .ui-page-heading {
-    @apply mb-7 flex items-center justify-between gap-6 max-mobile:flex-wrap max-mobile:items-start max-mobile:gap-[18px];
+    @apply mb-7 flex items-center justify-between gap-6 max-mobile:flex-wrap max-mobile:items-start max-mobile:gap-4;
   }
-  .ui-page-heading .ui-muted {
-    @apply mb-0 max-mobile:text-xs;
-  }
-  .ui-page-heading > .el-button {
-    @apply shrink-0;
-  }
-  .ui-panel {
-    @apply min-w-0 rounded-xl border border-[#e1e8ed] bg-white p-7;
-  }
-  .ui-dialog {
-    @apply max-w-[calc(100vw-32px)] rounded-[14px] p-[25px];
-  }
-  .ui-field {
-    @apply mb-[23px];
-  }
-  .ui-field > label {
-    @apply mb-2.5 block text-[13px] font-semibold text-[#334956];
-  }
-  .ui-field .el-input__wrapper {
-    @apply min-h-11;
-  }
-  .ui-field .el-textarea__inner {
-    @apply p-3 leading-[1.8];
-  }
-  .ui-help {
-    @apply mt-2.5 mb-0 text-xs leading-[1.8] text-[#8a98a0];
-  }
-  .ui-error {
-    @apply rounded-[7px] border border-[#f6d3cc] bg-[#fff2f0] px-[13px] py-[11px] text-[13px] leading-[1.6] text-[#a63e30];
-  }
+  .ui-page-heading .ui-muted { @apply mb-0; }
+  .ui-page-heading > .el-button { @apply shrink-0; }
+  .ui-panel { @apply min-w-0 rounded-2xl border border-line/70 bg-surface p-6; }
+  .ui-dialog { @apply max-w-[calc(100vw-32px)] rounded-2xl border border-line p-6; }
+  .ui-field { @apply mb-6; }
+  .ui-field > label { @apply mb-2.5 block text-sm font-medium text-ink; }
+  .ui-field .el-input__wrapper { @apply min-h-11; }
+  .ui-field .el-textarea__inner { @apply p-3 leading-[1.8]; }
+  .ui-help { @apply mt-2.5 mb-0 text-xs leading-[1.8] text-muted; }
+  .ui-error { @apply rounded-xl border border-danger/30 bg-danger/10 px-4 py-3 text-sm leading-[1.7] text-danger; }
   .ui-select {
-    @apply min-h-10 rounded-lg border border-[#dce4e9] bg-white py-2.5 pl-3 pr-[30px] text-[13px] text-[#39515e] focus-visible:outline-2 focus-visible:outline-focus focus-visible:outline-offset-2 disabled:cursor-wait disabled:opacity-60;
+    @apply min-h-11 rounded-lg border border-line bg-surface py-2.5 pl-3 pr-7 text-sm text-ink focus-visible:outline-2 focus-visible:outline-focus focus-visible:outline-offset-2 disabled:cursor-wait disabled:opacity-60;
   }
-  .ui-empty {
-    @apply rounded-xl border border-dashed border-[#cfdce0] bg-white px-6 py-14 text-center max-mobile:px-[18px] max-mobile:py-10;
-  }
-  .ui-empty > h2 {
-    @apply mb-3 text-xl;
-  }
-  .ui-empty > p {
-    @apply mb-6 text-[13px] leading-[1.9] text-[#7f8e98];
-  }
-  .ui-empty > .ui-empty-example {
-    @apply mt-[23px] mb-0 text-[11px] text-[#95a1a9];
-  }
-  .ui-empty-icon {
-    @apply mx-auto mb-[25px] grid size-[74px] place-items-center rounded-[22px] border-[6px] border-[#f7fbf9] bg-[#eef6f3] text-[38px] text-[#378d7d];
-  }
-  .ui-state {
-    @apply rounded-xl border border-[#e2e9ee] bg-white px-6 py-12 text-center;
-  }
-  .ui-state > p {
-    @apply text-sm leading-[1.8] text-[#7d8a94];
-  }
+  .ui-empty { @apply rounded-2xl border border-dashed border-line bg-surface/50 px-6 py-14 text-center max-mobile:px-5 max-mobile:py-10; }
+  .ui-empty > h2 { @apply mb-3 text-xl; }
+  .ui-empty > p { @apply mb-6 text-sm leading-[1.9] text-muted; }
+  .ui-empty > .ui-empty-example { @apply mt-6 mb-0 text-xs text-muted; }
+  .ui-empty-icon { @apply mx-auto mb-6 grid size-16 place-items-center rounded-2xl border border-brand/20 bg-brand/10 text-3xl text-brand; }
+  .ui-state { @apply rounded-2xl border border-line bg-surface px-6 py-12 text-center; }
+  .ui-state > p { @apply text-sm leading-[1.8] text-muted; }
 }

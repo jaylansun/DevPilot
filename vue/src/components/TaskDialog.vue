@@ -153,7 +153,7 @@ async function save() {
       <el-button @click="loadTask">重新读取任务</el-button>
     </div>
     <form v-else id="task-form" @submit.prevent="save">
-      <p class="mb-5 text-[13px] text-[#80919d]">
+      <p class="mb-5 text-sm leading-7 text-muted">
         写清楚要做什么，以及怎样才算完成。
       </p>
       <p v-if="loadError" role="alert" class="ui-error">
@@ -161,7 +161,7 @@ async function save() {
       </p>
       <div class="ui-field">
         <label for="task-title"
-          >任务标题 <span class="text-[#b75849]">*</span></label
+          >任务标题 <span class="text-danger">*</span></label
         ><el-input
           id="task-title"
           v-model="form.title"

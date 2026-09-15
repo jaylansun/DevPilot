@@ -129,6 +129,7 @@ async function planning(
                   error: {
                     code: "planning_unavailable",
                     message: "模型服务暂时不可用",
+                    request_id: "planning-test-request",
                   },
                 },
               }
@@ -169,6 +170,9 @@ test("任务规划入口展示只读草案、验收依赖和安全引用，双�
   await navigation.getByRole("link", { name: "任务规划", exact: true }).click();
   await expect(page).toHaveURL(`/projects/${id}?tab=planning`);
   await expect(page.getByRole("status")).toContainText("演示模式");
+  const conversation = page.getByRole("region", { name: "规划对话" });
+  await expect(conversation).toContainText("这次，你想推进什么？");
+  await expect(page.getByLabel("任务草案工作区")).toContainText("任务计划将在这里展开");
 
   await page.getByLabel("你想完成什么目标？").fill("  完成可靠的下单流程  ");
   await page.getByRole("button", { name: "生成任务草案", exact: true }).click();
@@ -193,6 +197,7 @@ test("任务规划入口展示只读草案、验收依赖和安全引用，双�
   await expect(firstTask).toContainText("输入合法信息后可以进入订单确认页。");
   await expect(secondTask).toContainText(/P2|优先级\s*[：:]?\s*2/);
   await expect(secondTask).toContainText("T1");
+  await expect(secondTask).toContainText("实现订单收货信息");
   await expect(secondTask).toContainText("库存不足时拒绝下单并显示明确原因。");
   await expect(firstTask).toContainText("[1]");
   await expect(secondTask).toContainText("[1]");
@@ -201,7 +206,7 @@ test("任务规划入口展示只读草案、验收依赖和安全引用，双�
   await expect(toolCalls).toContainText("检索项目文档 · 已完成 · 1 项");
   await expect(toolCalls).toContainText("读取任务看板 · 已完成 · 3 项");
   await expect(
-    page.getByText("仅草案预览，未写入任务看板，暂不支持提交审批或持久保存"),
+    page.getByText("仅生成临时草案，暂不支持保存、提交审批或加入看板"),
   ).toBeVisible();
   await expect(
     preview.getByRole("button", { name: /提交审批|保存|加入看板/ }),
@@ -214,6 +219,12 @@ test("任务规划入口展示只读草案、验收依赖和安全引用，双�
   expect(state.goals).toEqual([{ goal: "完成可靠的下单流程" }]);
   expect(state.unexpectedRequests).toEqual([]);
 
+  const desktopConversation = await conversation.boundingBox();
+  const desktopPreview = await preview.boundingBox();
+  expect(desktopConversation).not.toBeNull();
+  expect(desktopPreview).not.toBeNull();
+  expect(desktopConversation!.x + desktopConversation!.width).toBeLessThan(desktopPreview!.x);
+
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.screenshot({
     path: "test-results/screenshots/task-planning-desktop.png",
@@ -224,6 +235,13 @@ test("任务规划入口展示只读草案、验收依赖和安全引用，双�
   expect(
     await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth),
   ).toBe(true);
+  const mobileConversation = await conversation.boundingBox();
+  const mobilePreview = await preview.boundingBox();
+  expect(mobileConversation!.y + mobileConversation!.height).toBeLessThanOrEqual(mobilePreview!.y);
+  await page.getByLabel("你想完成什么目标？").focus();
+  await expect(page.getByLabel("你想完成什么目标？")).toBeInViewport();
+  await page.getByRole("button", { name: "重新生成草案", exact: true }).scrollIntoViewIfNeeded();
+  await expect(page.getByRole("button", { name: "重新生成草案", exact: true })).toBeInViewport();
   await page.screenshot({
     path: "test-results/screenshots/task-planning-mobile.png",
     fullPage: true,
@@ -266,6 +284,7 @@ test("模型失败保留规划目标，重试成功后展示草案", async ({ pa
   await input.fill("为订单增加库存校验");
   await page.getByRole("button", { name: "生成任务草案", exact: true }).click();
   await expect(page.getByRole("alert")).toContainText("模型服务暂时不可用");
+  await expect(page.getByRole("alert")).toContainText("请求编号：planning-test-request");
   await expect(input).toHaveValue("为订单增加库存校验");
   await expect(page.getByRole("region", { name: "任务方案预览" })).toHaveCount(0);
   state.fail = false;

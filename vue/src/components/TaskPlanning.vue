@@ -104,7 +104,9 @@ onBeforeUnmount(() => {
 <template>
   <section aria-label="项目任务规划" class="min-w-0 space-y-6">
     <div class="ui-panel max-mobile:p-5">
-      <div class="flex flex-wrap items-start justify-between gap-4">
+      <div
+        class="flex flex-wrap items-start justify-between gap-4 max-mobile:flex-col"
+      >
         <div class="min-w-0 flex-1">
           <h2 class="m-0 flex items-center gap-2 text-lg">
             <el-icon class="text-brand"><List /></el-icon>把目标拆成任务草案
@@ -238,7 +240,9 @@ onBeforeUnmount(() => {
             </ul>
             <p v-else class="ui-help m-0">本次未列出额外假设，请自行核对。</p>
           </div>
-          <div class="min-w-0 rounded-lg border border-amber-200 bg-amber-50/40 p-4">
+          <div
+            class="min-w-0 rounded-lg border border-amber-200 bg-amber-50/40 p-4"
+          >
             <h3 class="mb-2 text-sm">风险与待确认项</h3>
             <ul
               v-if="result.proposal.risks.length"
@@ -258,7 +262,9 @@ onBeforeUnmount(() => {
       </div>
 
       <div class="flex flex-wrap items-center justify-between gap-2 px-1">
-        <h3 class="m-0 text-base">建议任务 · {{ result.proposal.tasks.length }} 项</h3>
+        <h3 class="m-0 text-base">
+          建议任务 · {{ result.proposal.tasks.length }} 项
+        </h3>
         <span class="text-xs text-muted">优先级 1 最高，5 最低</span>
       </div>
       <article
@@ -330,14 +336,21 @@ onBeforeUnmount(() => {
             :aria-label="'来源 ' + source.source_id"
             class="rounded-lg border border-slate-200 p-4"
           >
-            <summary class="cursor-pointer text-sm leading-7 text-brand wrap-anywhere">
+            <summary
+              class="cursor-pointer text-sm leading-7 text-brand wrap-anywhere"
+            >
               [{{ source.source_id }}] {{ source.filename }} · 第
               {{ source.chunk_index + 1 }} 个片段
             </summary>
-            <p v-if="source.heading" class="mt-3 mb-0 text-xs leading-6 text-muted wrap-anywhere">
+            <p
+              v-if="source.heading"
+              class="mt-3 mb-0 text-xs leading-6 text-muted wrap-anywhere"
+            >
               {{ source.heading }}
             </p>
-            <blockquote class="mx-0 mb-0 border-l-2 border-brand/30 pl-4 text-sm leading-7 whitespace-pre-wrap wrap-anywhere">
+            <blockquote
+              class="mx-0 mb-0 border-l-2 border-brand/30 pl-4 text-sm leading-7 whitespace-pre-wrap wrap-anywhere"
+            >
               {{ source.text }}
             </blockquote>
           </details>
@@ -348,7 +361,11 @@ onBeforeUnmount(() => {
       <div class="ui-panel max-mobile:p-5" aria-label="已完成只读工具调用">
         <h3 class="mb-3 text-base">已完成只读工具调用</h3>
         <ul class="m-0 space-y-2 pl-5 text-sm leading-7">
-          <li v-for="(call, index) in result.tool_calls" :key="index" class="wrap-anywhere">
+          <li
+            v-for="(call, index) in result.tool_calls"
+            :key="index"
+            class="wrap-anywhere"
+          >
             {{ toolLabel(call.name) }} ·
             {{ call.status === "empty" ? "已完成，未找到内容" : "已完成" }} ·
             {{ call.item_count }} 项

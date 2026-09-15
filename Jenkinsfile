@@ -82,7 +82,20 @@ pipeline {
                         --tag "devpilot-api-test:${BUILD_NUMBER}" \
                         service
                 '''
-                sh 'docker run --rm --env-file .env devpilot-api-test:${BUILD_NUMBER}'
+                // 测试不读取部署凭据；模型使用替身，数据库使用测试自建的临时库。
+                sh '''
+                    docker run --rm --network none \
+                        -e AI_MODE=mock \
+                        -e MODEL_NAME= \
+                        -e LLM_API_KEY= \
+                        -e LLM_BASE_URL= \
+                        -e RAG_MIN_SCORE=0.5 \
+                        -e DATABASE_URL=postgresql+psycopg://test:test@127.0.0.1:1/devpilot_test \
+                        -e JWT_SECRET=devpilot-test-key-not-for-production \
+                        -e LANGSMITH_TRACING=false \
+                        -e LANGCHAIN_TRACING_V2=false \
+                        devpilot-api-test:${BUILD_NUMBER}
+                '''
             }
         }
 

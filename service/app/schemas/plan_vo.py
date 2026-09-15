@@ -52,7 +52,9 @@ class PlanProposalVO(BaseModel):
     summary: str = Field(min_length=1, max_length=2000, description="方案摘要")
     assumptions: list[PlanNote] = Field(max_length=8, description="需人工确认的假设")
     risks: list[PlanNote] = Field(max_length=8, description="实施风险与注意事项")
-    tasks: list[TaskDraftVO] = Field(min_length=1, max_length=12, description="任务草案")
+    tasks: list[TaskDraftVO] = Field(
+        min_length=1, max_length=12, description="任务草案"
+    )
 
     @model_validator(mode="after")
     def validate_tasks(self) -> Self:
@@ -63,7 +65,9 @@ class PlanProposalVO(BaseModel):
         if len(titles) != len(self.tasks):
             raise ValueError("任务标题不能重复")
         graph = {task.draft_id: task.dependencies for task in self.tasks}
-        if any(dependency not in ids for items in graph.values() for dependency in items):
+        if any(
+            dependency not in ids for items in graph.values() for dependency in items
+        ):
             raise ValueError("前置任务必须引用本方案中存在的编号")
         visiting, visited = set(), set()
 

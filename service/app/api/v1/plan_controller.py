@@ -28,7 +28,9 @@ async def planning_info(
     return await planner.info(session, current_user.id, project_id)
 
 
-@router.post("/proposals", response_model=PlanResultVO, summary="生成只读任务草案，不写入看板")
+@router.post(
+    "/proposals", response_model=PlanResultVO, summary="生成只读任务草案，不写入看板"
+)
 async def create_proposal(
     project_id: UUID,
     body: PlanRequestQO,

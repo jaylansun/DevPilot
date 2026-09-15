@@ -145,8 +145,14 @@ class PlanningReadService:
     async def search_documents(
         self, owner_id: UUID, project_id: UUID, query: str
     ) -> dict:
-        if not isinstance(query, str) or not 1 <= len(query.strip()) <= 2000:
-            raise ApiError(422, "invalid_planning_query", "检索内容须为 1 至 2000 个字符")
+        if (
+            not isinstance(query, str)
+            or not 1 <= len(query) <= 2000
+            or not query.strip()
+        ):
+            raise ApiError(
+                422, "invalid_planning_query", "检索内容须为 1 至 2000 个字符"
+            )
         async with self._lock:
             current = await self._read_context(owner_id, project_id)
             self._check_snapshot(current, owner_id, project_id)
@@ -168,6 +174,10 @@ class PlanningReadService:
             for chunk in chunks[:4]:
                 if chunk.document_id not in latest.ready_documents:
                     continue
+                truncated = truncated or (
+                    len(chunk.text) > MAX_EXCERPT_LENGTH
+                    or len(chunk.heading) > MAX_EXCERPT_LENGTH
+                )
                 key = (chunk.document_id, chunk.chunk_index)
                 if key in selected_keys:
                     continue
@@ -216,7 +226,9 @@ class PlanningReadService:
                     "status": task.status.value,
                     "priority": task.priority,
                     "description": task.description[:MAX_EXCERPT_LENGTH],
-                    "acceptance_criteria": task.acceptance_criteria[:MAX_EXCERPT_LENGTH],
+                    "acceptance_criteria": task.acceptance_criteria[
+                        :MAX_EXCERPT_LENGTH
+                    ],
                     "description_truncated": len(task.description) > MAX_EXCERPT_LENGTH,
                     "acceptance_criteria_truncated": (
                         len(task.acceptance_criteria) > MAX_EXCERPT_LENGTH

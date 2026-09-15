@@ -1,3 +1,4 @@
+from httpx import TransportError
 from langchain.agents import create_agent
 from langchain.agents.middleware import (
     ModelCallLimitMiddleware,
@@ -6,7 +7,6 @@ from langchain.agents.middleware import (
 )
 from langchain.agents.structured_output import ToolStrategy
 from langchain_openai import ChatOpenAI
-from httpx import TransportError
 
 from app.config import Settings
 from app.errors import ApiError
@@ -37,6 +37,7 @@ def build_planning_agent(model):
         response_format=ToolStrategy(PlanProposalVO, handle_errors=False),
         middleware=[
             ModelCallLimitMiddleware(run_limit=4, exit_behavior="error"),
+            # 六次总额度包含结构化输出；成功返回方案需为最后一次输出预留额度。
             ToolCallLimitMiddleware(run_limit=6, exit_behavior="error"),
             ToolRetryMiddleware(
                 max_retries=1,
@@ -54,9 +55,21 @@ def build_mock_proposal(goal: str, context: PlanToolContext) -> PlanProposalVO:
     titles = {normalize_task_title(title) for title in context.reader.existing_titles}
     tasks = []
     stages = [
-        ("确认需求边界", "核对检索到的原文与目标，列出需要人工确认的范围。", "形成范围清单，并标注每项的资料依据或待确认事项。"),
-        ("制定实现与验证方案", "在需求范围确认后，结合现有任务制定实现步骤，避免重复工作。", "实现步骤与现有任务的关系明确，每项都有可执行的验证方法。"),
-        ("检查验收与风险", "依据已确认方案检查验收标准，记录尚未解决的风险。", "验收检查清单可逐项执行，未解决风险均有后续处理说明。"),
+        (
+            "确认需求边界",
+            "核对检索到的原文与目标，列出需要人工确认的范围。",
+            "形成范围清单，并标注每项的资料依据或待确认事项。",
+        ),
+        (
+            "制定实现与验证方案",
+            "在需求范围确认后，结合现有任务制定实现步骤，避免重复工作。",
+            "实现步骤与现有任务的关系明确，每项都有可执行的验证方法。",
+        ),
+        (
+            "检查验收与风险",
+            "依据已确认方案检查验收标准，记录尚未解决的风险。",
+            "验收检查清单可逐项执行，未解决风险均有后续处理说明。",
+        ),
     ]
     for number, (suffix, description, criteria) in enumerate(stages, 1):
         base = f"{goal[:60]}：{suffix}"
@@ -91,10 +104,16 @@ class PlanAgentService:
 
     async def generate(self, goal: str, context: PlanToolContext) -> PlanProposalVO:
         if self.settings.ai_mode == "mock":
-            await context.reader.search_documents(context.owner_id, context.project_id, goal)
+            await context.reader.search_documents(
+                context.owner_id, context.project_id, goal
+            )
             await context.reader.read_task_board(context.owner_id, context.project_id)
             if not context.reader.sources:
-                raise ApiError(409, "planning_no_evidence", "没有找到相关文档片段，请补充资料或调整规划目标")
+                raise ApiError(
+                    409,
+                    "planning_no_evidence",
+                    "没有找到相关文档片段，请补充资料或调整规划目标",
+                )
             return build_mock_proposal(goal, context)
         if self._agent is None:
             self._agent = build_planning_agent(

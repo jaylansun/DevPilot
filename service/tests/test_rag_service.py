@@ -17,12 +17,57 @@ from app.services.rag_service import RagService, build_answer
 
 
 def settings(**kwargs):
-    return Settings(
-        _env_file=None,
-        database_url="postgresql+psycopg://unused",
-        jwt_secret="测试密钥",
-        **kwargs,
-    )
+    values = {
+        "database_url": "postgresql+psycopg://unused",
+        "jwt_secret": "测试密钥",
+        "ai_mode": "mock",
+        "model_name": "",
+        "llm_api_key": "",
+        "llm_base_url": "",
+        "rag_min_score": 0.5,
+    }
+    values.update(kwargs)
+    return Settings(_env_file=None, **values)
+
+
+@pytest.mark.parametrize(
+    "overrides,expected",
+    [
+        ({}, ("mock", "", "", "", 0.5)),
+        ({"ai_mode": "live"}, ("live", "", "", "", 0.5)),
+        (
+            {
+                "ai_mode": "live",
+                "model_name": "fixture-model",
+                "llm_api_key": "fixture-key",
+                "llm_base_url": "https://fixture.invalid/v1",
+                "rag_min_score": 0.8,
+            },
+            ("live", "fixture-model", "fixture-key", "https://fixture.invalid/v1", 0.8),
+        ),
+    ],
+    ids=["defaults", "live_without_credentials", "explicit_configuration"],
+)
+def test_settings_ignore_external_live_configuration(monkeypatch, overrides, expected):
+    """服务测试固定模式和空凭据，显式覆盖仍按测试要求生效。"""
+    for name, value in {
+        "AI_MODE": "live",
+        "MODEL_NAME": "injected-model",
+        "LLM_API_KEY": "injected-fake-key",
+        "LLM_BASE_URL": "https://injected.invalid/v1",
+        "RAG_MIN_SCORE": "0.9",
+    }.items():
+        monkeypatch.setenv(name, value)
+    config = settings(**overrides)
+    assert (
+        config.ai_mode,
+        config.model_name,
+        config.llm_api_key.get_secret_value(),
+        config.llm_base_url,
+        config.rag_min_score,
+    ) == expected
+    assert config.database_url == "postgresql+psycopg://unused"
+    assert config.jwt_secret.get_secret_value() == "测试密钥"
 
 
 @pytest.fixture

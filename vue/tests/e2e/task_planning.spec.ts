@@ -84,10 +84,8 @@ async function planning(
               title: "实现订单收货信息",
               description: unsafeDescription,
               priority: 1,
-              acceptance_criteria: [
-                "缺少收货人、手机号或地址时禁止提交。",
-                "输入合法信息后可以进入订单确认页。",
-              ],
+              acceptance_criteria:
+                "缺少收货人、手机号或地址时禁止提交。\n输入合法信息后可以进入订单确认页。",
               dependencies: [],
               source_ids: [1],
             },
@@ -96,7 +94,7 @@ async function planning(
               title: "校验库存与提交订单",
               description: "复用订单信息，在提交时检查可售库存。",
               priority: 2,
-              acceptance_criteria: ["库存不足时拒绝下单并显示明确原因。"],
+              acceptance_criteria: "库存不足时拒绝下单并显示明确原因。",
               dependencies: ["T1"],
               source_ids: [1],
             },
@@ -199,10 +197,11 @@ test("任务规划入口展示只读草案、验收依赖和安全引用，双�
   await expect(firstTask).toContainText("[1]");
   await expect(secondTask).toContainText("[1]");
   await expect(preview).toContainText("已完成只读工具调用");
+  const toolCalls = preview.getByLabel("已完成只读工具调用", { exact: true });
+  await expect(toolCalls).toContainText("检索项目文档 · 已完成 · 1 项");
+  await expect(toolCalls).toContainText("读取任务看板 · 已完成 · 3 项");
   await expect(
-    page.getByText("仅草案预览，未写入任务看板，暂不支持提交审批或持久保存", {
-      exact: true,
-    }),
+    page.getByText("仅草案预览，未写入任务看板，暂不支持提交审批或持久保存"),
   ).toBeVisible();
   await expect(
     preview.getByRole("button", { name: /提交审批|保存|加入看板/ }),

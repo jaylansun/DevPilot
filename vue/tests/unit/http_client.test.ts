@@ -7,9 +7,32 @@ beforeEach(() => {
   vi.stubGlobal("fetch", fetchMock);
   configureAuth(() => "test-token", expired);
 });
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.useRealTimers();
+});
 
 describe("统一请求客户端", () => {
+  it("主动取消与超时返回不同错误码", async () => {
+    fetchMock.mockImplementation(
+      (_url, options) =>
+        new Promise((_resolve, reject) => {
+          options.signal.addEventListener("abort", () =>
+            reject(new DOMException("停止", "AbortError")),
+          );
+        }),
+    );
+    const controller = new AbortController();
+    const result = request("/test", { signal: controller.signal });
+    controller.abort();
+    await expect(result).rejects.toMatchObject({ code: "cancelled" });
+    vi.useFakeTimers();
+    const timeout = expect(
+      request("/test", { timeoutMs: 75_000 }),
+    ).rejects.toMatchObject({ code: "timeout" });
+    await vi.advanceTimersByTimeAsync(75_000);
+    await timeout;
+  });
   it("上传文件直接发送 FormData，由浏览器生成 multipart 边界", async () => {
     fetchMock.mockResolvedValue(
       new Response(JSON.stringify({ status: "queued" }), { status: 202 }),

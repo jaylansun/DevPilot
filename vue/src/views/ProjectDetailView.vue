@@ -8,6 +8,8 @@ import { errorMessage } from "@/api/http_client";
 import ProjectDialog from "@/components/ProjectDialog.vue";
 import TaskBoard from "@/components/TaskBoard.vue";
 import DocumentLibrary from "@/components/DocumentLibrary.vue";
+import KnowledgeChat from "@/components/KnowledgeChat.vue";
+import TaskPlanning from "@/components/TaskPlanning.vue";
 import type { ProjectVO } from "@/types/api";
 
 const route = useRoute();
@@ -17,6 +19,8 @@ const error = ref("");
 const editing = ref(false);
 const showingTasks = computed(() => route.query.tab === "tasks");
 const showingDocuments = computed(() => route.query.tab === "documents");
+const showingChat = computed(() => route.query.tab === "chat");
+const showingPlanning = computed(() => route.query.tab === "planning");
 
 async function loadProject() {
   loading.value = true;
@@ -68,7 +72,11 @@ onMounted(loadProject);
                 ? "任务看板"
                 : showingDocuments
                   ? "知识库"
-                  : "项目概览"
+                  : showingChat
+                    ? "AI 问答"
+                    : showingPlanning
+                      ? "任务规划"
+                      : "项目概览"
             }}
           </p>
           <h1 class="wrap-anywhere">{{ project.name }}</h1>
@@ -77,19 +85,21 @@ onMounted(loadProject);
         <el-button :icon="Edit" @click="editing = true">编辑项目</el-button>
       </div>
       <nav
-        class="mb-7 flex gap-[26px] border-b border-[#dfe7ec]"
+        class="mb-7 flex flex-wrap gap-x-[26px] border-b border-[#dfe7ec] max-mobile:gap-x-4"
         aria-label="项目功能"
       >
         <RouterLink
           :to="{ path: route.path }"
           class="border-b-2 px-[3px] pt-3 pb-4 text-sm"
           :class="
-            !showingTasks && !showingDocuments
+            !showingTasks && !showingDocuments && !showingChat && !showingPlanning
               ? 'border-brand text-brand font-semibold'
               : 'border-transparent text-[#7c8d98]'
           "
           :aria-current="
-            !showingTasks && !showingDocuments ? 'page' : undefined
+            !showingTasks && !showingDocuments && !showingChat && !showingPlanning
+              ? 'page'
+              : undefined
           "
           >项目概览</RouterLink
         >
@@ -115,9 +125,33 @@ onMounted(loadProject);
           :aria-current="showingDocuments ? 'page' : undefined"
           >知识库</RouterLink
         >
+        <RouterLink
+          :to="{ path: route.path, query: { tab: 'chat' } }"
+          class="border-b-2 px-[3px] pt-3 pb-4 text-sm"
+          :class="
+            showingChat
+              ? 'border-brand text-brand font-semibold'
+              : 'border-transparent text-[#7c8d98]'
+          "
+          :aria-current="showingChat ? 'page' : undefined"
+          >AI 问答</RouterLink
+        >
+        <RouterLink
+          :to="{ path: route.path, query: { tab: 'planning' } }"
+          class="border-b-2 px-[3px] pt-3 pb-4 text-sm"
+          :class="
+            showingPlanning
+              ? 'border-brand text-brand font-semibold'
+              : 'border-transparent text-[#7c8d98]'
+          "
+          :aria-current="showingPlanning ? 'page' : undefined"
+          >任务规划</RouterLink
+        >
       </nav>
       <TaskBoard v-if="showingTasks" :project-id="project.id" />
       <DocumentLibrary v-else-if="showingDocuments" :project-id="project.id" />
+      <KnowledgeChat v-else-if="showingChat" :project-id="project.id" />
+      <TaskPlanning v-else-if="showingPlanning" :project-id="project.id" />
       <div
         v-else
         class="grid grid-cols-[minmax(0,1fr)_265px] gap-6 max-tablet:grid-cols-1"

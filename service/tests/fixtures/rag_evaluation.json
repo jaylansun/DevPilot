@@ -1,0 +1,31 @@
+{
+  "description": "第 8 天固定评估集：10 个有依据的问题，2 个无依据的问题；仅包含虚构的测试业务资料。",
+  "documents": [
+    {
+      "filename": "菜单规则.md",
+      "content": "# 菜单与购物车\n菜品列表展示名称、价格和库存。\n顾客可以向购物车添加菜品、修改数量或移除菜品。\n库存不足时禁止提交订单。"
+    },
+    {
+      "filename": "订单规则.md",
+      "content": "# 订单管理\n提交订单必须填写收货人、手机号和配送地址。\n订单状态依次为待接单、备餐中、配送中、已完成。\n同一次提交不能创建重复订单。\n顾客只能查看自己的订单。"
+    },
+    {
+      "filename": "配送规则.md",
+      "content": "# 配送政策\n普通订单配送费为 3 元。\n商品金额满 50 元免配送费。\n配送范围为餐厅周边 3 公里以内。"
+    }
+  ],
+  "cases": [
+    {"id": "menu-fields", "question": "菜品列表需要展示哪些信息？", "expected_filename": "菜单规则.md", "keywords": ["名称", "价格", "库存"]},
+    {"id": "cart-operations", "question": "顾客可以在购物车中做哪些操作？", "expected_filename": "菜单规则.md", "keywords": ["添加", "数量", "移除"]},
+    {"id": "stock-check", "question": "库存不足时能否提交订单？", "expected_filename": "菜单规则.md", "keywords": ["库存", "订单"]},
+    {"id": "order-fields", "question": "提交订单时必须填写什么信息？", "expected_filename": "订单规则.md", "keywords": ["收货人", "手机号", "地址"]},
+    {"id": "order-status", "question": "订单包含哪些状态？", "expected_filename": "订单规则.md", "keywords": ["待接单", "备餐中", "配送中", "已完成"]},
+    {"id": "order-duplicate", "question": "同一次提交能否创建重复订单？", "expected_filename": "订单规则.md", "keywords": ["重复", "订单"]},
+    {"id": "order-privacy", "question": "顾客能查看其他人的订单吗？", "expected_filename": "订单规则.md", "keywords": ["自己", "订单"]},
+    {"id": "delivery-price", "question": "普通订单配送费是多少？", "expected_filename": "配送规则.md", "keywords": ["3", "元"]},
+    {"id": "delivery-free", "question": "商品金额达到多少可以免配送费？", "expected_filename": "配送规则.md", "keywords": ["50", "元"]},
+    {"id": "delivery-range", "question": "餐厅的配送范围是多少公里？", "expected_filename": "配送规则.md", "keywords": ["3", "公里"]},
+    {"id": "unknown-invoice", "question": "如何申请增值税发票？", "expected_filename": null, "keywords": []},
+    {"id": "unknown-phone", "question": "老板的私人电话号码是多少？", "expected_filename": null, "keywords": []}
+  ]
+}

@@ -194,8 +194,8 @@ onBeforeUnmount(() => {
         class="mt-5 rounded-lg bg-amber-50 px-4 py-3 text-xs leading-6 text-amber-800"
       >
         首次索引需要下载本地中文向量模型，可能需要几分钟；之后会复用缓存。
-        文档在服务器本地处理，无需填写大模型 API Key。当前阶段只建立知识库，AI
-        问答将在下一步接入。
+        向量化在服务器本地完成，无需填写大模型 API Key。索引就绪后可进入“AI
+        问答”；真实问答会把相关片段发送给服务器配置的模型服务。
       </div>
     </div>
 

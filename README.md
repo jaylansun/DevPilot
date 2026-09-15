@@ -8,11 +8,14 @@
 - 第 5 天：Vue 登录、项目列表、项目详情、新建/编辑/删除项目和响应式工作区布局；
 - 第 6 天：项目任务看板、任务增删改查、状态流转、优先级筛选与版本冲突处理；
 - 第 7 天：文档上传、Markdown 分块、本地中文向量模型、Chroma 持久化、后台索引与失败重试；
+- 第 8 天：两步知识库问答、服务端来源校验、可展开的原文引用、显式演示/真实模型模式和 12 条固定评估用例；
 - PostgreSQL 17 + pgvector、数据库迁移、Docker Compose 和 Jenkins 测试部署。
 
-接下来按第 8 天计划接入带引用的知识库问答。当前还没有 AI 问答、任务生成和审批功能。
+接下来按第 9 天计划实现只读 Tool、Agent 和结构化任务方案。当前问答是单轮请求，尚未接入流式输出、持久会话、任务自动生成和审批。
 
 第 7 天的部署步骤、示例文档、模型下载和数据保存说明见 [文档知识库说明](docs/day7-knowledge-library.md)。
+
+第 8 天的模型配置、隐私边界和评估方法见 [知识库问答说明](docs/day8-knowledge-qa.md)。默认 `AI_MODE=mock` 仅展示真实检索的来源，不调用在线模型，不伪装成已接入 AI。真实模式需要配置模型后另行验收。
 
 ## 启动
 
@@ -63,6 +66,7 @@ npm run dev
 4. 删除前会再次确认，并提示项目下的任务和文档也会删除，对应向量在后台清理。
 5. 打开项目后，点击“任务看板”，新建任务并填写标题、说明、优先级和验收标准。
 6. 看板按“待办 / 进行中 / 已完成”分列，卡片底部可切换状态。点击任务标题或编辑按钮查看完整内容；删除需再次确认。
+7. 在“知识库”上传 .md / .txt，等待索引就绪。进入“AI 问答”，输入关于资料的问题，展开回答下方的文件名查看原文片段。
 
 例如，“餐厅外卖网站”是项目；“完成购物车页面”“编写订单接口”是项目下的任务。“可以添加商品、修改数量，总价计算正确”是购物车任务的验收标准。
 
@@ -142,4 +146,6 @@ sudo docker compose exec api \
 - `/api/v1/projects/{project_id}/documents`：上传、列表与索引状态；
 - `DELETE /api/v1/projects/{project_id}/documents/{document_id}`：受理删除文档与对应向量；
 - `POST /api/v1/projects/{project_id}/documents/{document_id}/retry`：重试失败的索引或删除；
+- `GET /api/v1/projects/{project_id}/knowledge`：读取问答模式、模型配置是否齐全和就绪文档数；
+- `POST /api/v1/projects/{project_id}/knowledge/questions`：单轮两步 RAG 问答，返回回答及来源片段；
 - `GET /api/v1/health`：服务健康检查。

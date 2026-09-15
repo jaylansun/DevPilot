@@ -25,6 +25,8 @@ type RequestOptions = {
   method?: "GET" | "POST" | "PATCH" | "DELETE";
   body?: unknown;
   token?: string | null;
+  timeoutMs?: number;
+  signal?: AbortSignal;
 };
 
 const messages: Record<number, string> = {
@@ -50,7 +52,13 @@ export async function request<T>(
   if (options.body !== undefined && !multipart)
     headers.set("Content-Type", "application/json");
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 20_000);
+  const cancel = () => controller.abort();
+  if (options.signal?.aborted) cancel();
+  else options.signal?.addEventListener("abort", cancel, { once: true });
+  const timeout = setTimeout(
+    () => controller.abort(),
+    options.timeoutMs ?? 20_000,
+  );
   try {
     const response = await fetch(`/api/v1${path}`, {
       method: options.method ?? "GET",
@@ -87,6 +95,8 @@ export async function request<T>(
     return payload as T;
   } catch (error) {
     if (error instanceof ApiError) throw error;
+    if (options.signal?.aborted)
+      throw new ApiError("已停止等待回答", 0, "cancelled");
     throw new ApiError(
       controller.signal.aborted
         ? "请求超时，请检查网络后重试"
@@ -96,6 +106,7 @@ export async function request<T>(
     );
   } finally {
     clearTimeout(timeout);
+    options.signal?.removeEventListener("abort", cancel);
   }
 }
 

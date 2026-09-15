@@ -1,18 +1,24 @@
 from functools import lru_cache
 from pathlib import Path
-from typing import Annotated
+from typing import Annotated, Literal
 
-from pydantic import SecretStr, field_validator
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file="../.env", env_file_encoding="utf-8", extra="ignore")
+    model_config = SettingsConfigDict(
+        env_file="../.env", env_file_encoding="utf-8", extra="ignore"
+    )
 
     app_name: str = "DevPilot API"
     environment: str = "development"
     api_prefix: str = "/api/v1"
-    ai_mode: str = "mock"
+    ai_mode: Literal["mock", "live"] = "mock"
+    model_name: str = ""
+    llm_api_key: SecretStr = SecretStr("")
+    llm_base_url: str = ""
+    rag_min_score: float = Field(default=0.5, ge=0, le=1)
     knowledge_data_dir: Path = Path("data")
     database_url: str
     jwt_secret: SecretStr

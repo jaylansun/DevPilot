@@ -13,16 +13,25 @@ from app.middleware.upload_limit_middleware import UploadLimitMiddleware
 from app.schemas.system_vo import HealthVO
 from app.services.document_index_service import DocumentIndexService
 from app.services.document_worker_service import DocumentWorkerService
+from app.services.rag_model_service import RagModelService
+from app.services.rag_service import RagService
+from app.services.plan_service import PlanService
+from app.services.plan_agent_service import PlanAgentService
 
 
 settings = get_settings()
 
 
 @asynccontextmanager
-async def lifespan(_: FastAPI):
-    worker = DocumentWorkerService(
-        AsyncSessionFactory, DocumentIndexService(settings.knowledge_data_dir)
+async def lifespan(application: FastAPI):
+    index_service = DocumentIndexService(settings.knowledge_data_dir)
+    application.state.rag_service = RagService(
+        settings, index_service, RagModelService(settings)
     )
+    application.state.plan_service = PlanService(
+        settings, index_service, AsyncSessionFactory, PlanAgentService(settings)
+    )
+    worker = DocumentWorkerService(AsyncSessionFactory, index_service)
     task = asyncio.create_task(worker.run(), name="document-index-worker")
     try:
         yield

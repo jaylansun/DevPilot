@@ -111,7 +111,11 @@ function signOut() {
               ? "任务看板"
               : route.name === "project" && route.query.tab === "documents"
                 ? "知识库"
-                : route.meta.title
+                : route.name === "project" && route.query.tab === "chat"
+                  ? "AI 问答"
+                  : route.name === "project" && route.query.tab === "planning"
+                    ? "任务规划"
+                    : route.meta.title
           }}</strong>
         </div>
         <div

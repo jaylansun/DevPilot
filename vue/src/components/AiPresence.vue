@@ -6,10 +6,11 @@ const root = ref<HTMLDivElement>();
 const canvas = ref<HTMLCanvasElement>();
 const ready = ref(false);
 const unavailable = ref(false);
-const paused = ref(false);
+const introFinished = ref(false);
 const reducedMotion = ref(false);
 const gradientId = `ai-presence-${useId().replace(/:/g, "")}`;
-const isStatic = computed(() => paused.value || reducedMotion.value);
+const isStatic = computed(() => introFinished.value || reducedMotion.value);
+let introTimer: ReturnType<typeof setTimeout> | null = null;
 let renderer: PresenceRenderer | null = null;
 let motion: ReturnType<
   (typeof import("@/graphics/ai_presence"))["createPresenceMotion"]
@@ -26,6 +27,17 @@ function syncMotion() {
   motion?.setActive(visible && !document.hidden);
 }
 
+function clearIntroTimer() {
+  if (introTimer !== null) clearTimeout(introTimer);
+  introTimer = null;
+}
+
+function finishIntro() {
+  clearIntroTimer();
+  introFinished.value = true;
+  syncMotion();
+}
+
 function resizeCanvas() {
   const bounds = root.value?.getBoundingClientRect();
   if (!bounds || !renderer) return;
@@ -34,6 +46,7 @@ function resizeCanvas() {
 }
 
 function useFallback() {
+  clearIntroTimer();
   unavailable.value = true;
   ready.value = false;
   motion?.dispose();
@@ -62,6 +75,10 @@ async function loadGraphic() {
       try {
         renderer?.render(seconds);
         ready.value = true;
+        // 仅首次显示时轻动片刻，随后保留静态画面，不把装饰做成播放器。
+        if (!isStatic.value && introTimer === null) {
+          introTimer = setTimeout(finishIntro, 1600);
+        }
       } catch {
         useFallback();
       }
@@ -82,12 +99,7 @@ function visibilityChanged() {
 
 function preferenceChanged() {
   reducedMotion.value = media?.matches ?? false;
-  syncMotion();
-}
-
-function toggleMotion() {
-  if (reducedMotion.value) return;
-  paused.value = !paused.value;
+  if (reducedMotion.value) finishIntro();
   syncMotion();
 }
 
@@ -103,6 +115,7 @@ onMounted(() => {
   };
   media = window.matchMedia("(prefers-reduced-motion: reduce)");
   reducedMotion.value = media.matches;
+  introFinished.value = reducedMotion.value;
   media.addEventListener("change", preferenceChanged);
   // 节流网络或低配小屏保持静态展示，不占用 GPU。
   const lowMemory =
@@ -140,6 +153,7 @@ onMounted(() => {
 
 onBeforeUnmount(() => {
   disposed = true;
+  clearIntroTimer();
   intersection?.disconnect();
   resize?.disconnect();
   media?.removeEventListener("change", preferenceChanged);
@@ -154,8 +168,10 @@ onBeforeUnmount(() => {
 <template>
   <div
     ref="root"
-    class="relative isolate h-full w-full"
+    class="pointer-events-none relative isolate h-full w-full"
     data-testid="ai-presence"
+    :data-motion="!ready ? 'fallback' : isStatic ? 'static' : 'intro'"
+    aria-hidden="true"
   >
     <div class="pointer-events-none absolute inset-0" aria-hidden="true">
       <svg
@@ -253,42 +269,5 @@ onBeforeUnmount(() => {
         :class="ready ? 'opacity-100' : 'opacity-0'"
       />
     </div>
-    <button
-      v-if="ready && !unavailable && !reducedMotion"
-      type="button"
-      class="absolute bottom-0 right-0 flex min-h-11 min-w-11 cursor-pointer items-center justify-center rounded-xl text-[#637086] transition-colors before:absolute before:inset-2 before:rounded-lg before:bg-white/85 before:shadow-[0_2px_10px_rgba(35,55,100,0.06)] hover:text-[#365eea] hover:before:bg-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#365eea] motion-reduce:transition-none"
-      :aria-label="paused ? '播放装饰动画' : '暂停装饰动画'"
-      :title="paused ? '播放装饰动画' : '暂停装饰动画'"
-      @click="toggleMotion"
-    >
-      <svg
-        v-if="paused"
-        class="relative"
-        width="14"
-        height="14"
-        viewBox="0 0 16 16"
-        fill="currentColor"
-        aria-hidden="true"
-      >
-        <path d="m5 3 7 5-7 5V3Z" />
-      </svg>
-      <svg
-        v-else
-        class="relative"
-        width="14"
-        height="14"
-        viewBox="0 0 16 16"
-        fill="currentColor"
-        aria-hidden="true"
-      >
-        <rect x="4" y="3" width="2.5" height="10" rx="1" />
-        <rect x="9.5" y="3" width="2.5" height="10" rx="1" />
-      </svg>
-    </button>
-    <span
-      v-if="reducedMotion && ready"
-      class="absolute bottom-1 right-1 text-xs text-[#637086]"
-      >已减少动态</span
-    >
   </div>
 </template>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
-import { Document, Refresh, UploadFilled } from "@element-plus/icons-vue";
+import { Delete, Document, Refresh, UploadFilled } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import {
   deleteDocument,
@@ -111,6 +111,10 @@ async function operate(doc: DocumentVO, remove: boolean) {
           confirmButtonText: "确认删除",
           cancelButtonText: "取消",
           type: "warning",
+          icon: Delete,
+          customClass: "ui-confirm-danger",
+          confirmButtonType: "danger",
+          autofocus: false,
         },
       );
     } catch {

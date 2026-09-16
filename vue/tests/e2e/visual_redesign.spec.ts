@@ -34,29 +34,61 @@ async function workspace(page: Page) {
   });
 }
 
-test("登录页3D可暂停，减少动态后保留静态画面", async ({ page }) => {
+test("登录页3D无控制按钮，短暂入场后自动静止并遵循减少动态偏好", async ({ page }) => {
   const errors: string[] = [];
   page.on("pageerror", (error) => errors.push(error.message));
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto("/login");
   const scene = page.getByTestId("ai-presence");
-  // 本地 Chrome 支持 WebGL2：除单元测试外，再验证真实着色器与可访问控制按钮。
+  // 3D 只是装饰，不进入键盘操作或读屏内容；首次轻动结束后不再持续消耗渲染帧。
+  await expect(scene).toHaveAttribute("aria-hidden", "true");
+  await expect(scene).toHaveCSS("pointer-events", "none");
+  await expect(scene.locator("button")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /装饰动画/ })).toHaveCount(0);
+  await expect(page.getByText("已减少动态")).toHaveCount(0);
   await expect(scene.locator("canvas")).toHaveCSS("opacity", "1", { timeout: 10000 });
-  await page.getByRole("button", { name: "暂停装饰动画", exact: true }).click();
-  await expect(page.getByRole("button", { name: "播放装饰动画", exact: true })).toBeVisible();
+  await expect(scene).toHaveAttribute("data-motion", "intro");
+  await expect(scene).toHaveAttribute("data-motion", "static", { timeout: 5000 });
   await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
-  const pausedAlpha = await scene.locator("canvas").evaluate((element) => {
+  const staticPixels = await scene.locator("canvas").evaluate((element) => {
     const canvas = element as HTMLCanvasElement;
     const gl = canvas.getContext("webgl2")!;
     const pixel = new Uint8Array(4);
     gl.readPixels(Math.floor(canvas.width / 2), Math.floor(canvas.height / 2), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
-    return pixel[3];
+    return { alpha: pixel[3], image: canvas.toDataURL() };
   });
-  expect(pausedAlpha).toBeGreaterThan(0);
+  expect(staticPixels.alpha).toBeGreaterThan(0);
+  // 跨过足够多的浏览器帧，确认不是仅修改状态标签而仍在偷偷旋转。
+  await page.evaluate(() => new Promise<void>((resolve) => {
+    let frames = 0;
+    const next = () => ++frames >= 24 ? resolve() : requestAnimationFrame(next);
+    requestAnimationFrame(next);
+  }));
+  expect(await scene.locator("canvas").evaluate((element) => (element as HTMLCanvasElement).toDataURL())).toBe(staticPixels.image);
   await page.screenshot({ animations: "disabled", path: "test-results/screenshots/redesign-login.png", fullPage: true });
+
+  // 从页面加载前开启减少动态，第一帧就保持静止，不等待一次入场动画结束。
   await page.emulateMedia({ reducedMotion: "reduce" });
+  await page.reload();
+  await expect(scene.locator("canvas")).toHaveCSS("opacity", "1", { timeout: 10000 });
+  await expect(scene).toHaveAttribute("data-motion", "static");
+  await expect(scene.locator("button")).toHaveCount(0);
   await expect(page.getByRole("button", { name: /装饰动画/ })).toHaveCount(0);
-  await expect(page.getByText("已减少动态")).toBeVisible();
+  await expect(page.getByText("已减少动态")).toHaveCount(0);
+  const reducedPixels = await scene.locator("canvas").evaluate((element) => {
+    const canvas = element as HTMLCanvasElement;
+    const gl = canvas.getContext("webgl2")!;
+    const pixel = new Uint8Array(4);
+    gl.readPixels(Math.floor(canvas.width / 2), Math.floor(canvas.height / 2), 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
+    return { alpha: pixel[3], image: canvas.toDataURL() };
+  });
+  expect(reducedPixels.alpha).toBeGreaterThan(0);
+  await page.evaluate(() => new Promise<void>((resolve) => {
+    let frames = 0;
+    const next = () => ++frames >= 24 ? resolve() : requestAnimationFrame(next);
+    requestAnimationFrame(next);
+  }));
+  expect(await scene.locator("canvas").evaluate((element) => (element as HTMLCanvasElement).toDataURL())).toBe(reducedPixels.image);
   expect(errors).toEqual([]);
 });
 
@@ -72,9 +104,10 @@ test("浅色项目与聊天空态，输入框在双端首屏可达", async ({ pa
   const input = page.getByLabel("你想了解什么？");
   await expect(input).toBeEnabled();
   await expect(page.getByTestId("ai-presence").locator("canvas")).toHaveCSS("opacity", "1", { timeout: 10000 });
-  await page.getByRole("button", { name: "暂停装饰动画", exact: true }).click();
-  await expect(page.getByRole("button", { name: "播放装饰动画", exact: true })).toBeVisible();
-  // 等待暂停状态及可见画布完成合成；只检查 WebGL 缓冲区会漏掉页面截图中的空白。
+  await expect(page.getByTestId("ai-presence").locator("button")).toHaveCount(0);
+  await expect(page.getByRole("button", { name: /装饰动画/ })).toHaveCount(0);
+  await expect(page.getByTestId("ai-presence")).toHaveAttribute("data-motion", "static", { timeout: 5000 });
+  // 等待自动静止状态及可见画布完成合成；只检查 WebGL 缓冲区会漏掉页面截图中的空白。
   await page.evaluate(() => new Promise<void>((resolve) => requestAnimationFrame(() => requestAnimationFrame(() => resolve()))));
   const presenceBounds = (await page.getByTestId("ai-presence").boundingBox())!;
   const chatScreenshot = await page.screenshot({ animations: "disabled", path: "test-results/screenshots/redesign-chat-empty.png", fullPage: true });
@@ -121,6 +154,8 @@ test("规划左右工作区与无WebGL降级不阻断业务", async ({ page }) =
   await page.setViewportSize({ width: 1440, height: 1000 });
   await page.goto(`/projects/${projectId}?tab=chat`);
   await expect(page.getByTestId("ai-presence-fallback")).toBeVisible();
+  await expect(page.getByTestId("ai-presence")).toHaveAttribute("data-motion", "fallback");
+  await expect(page.getByTestId("ai-presence").locator("button")).toHaveCount(0);
   await expect(page.getByLabel("你想了解什么？")).toBeEnabled();
   await page.getByRole("link", { name: "任务规划", exact: true }).click();
   await expect(page.getByLabel("你想完成什么目标？")).toBeEnabled();

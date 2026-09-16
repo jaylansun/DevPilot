@@ -55,6 +55,8 @@ async function save() {
     :title="project ? '编辑项目' : '新建项目'"
     width="560px"
     class="ui-dialog"
+    align-center
+    append-to-body
     :close-on-click-modal="false"
     :close-on-press-escape="!saving"
     :show-close="!saving"

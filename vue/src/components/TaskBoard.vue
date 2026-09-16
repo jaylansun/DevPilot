@@ -103,6 +103,10 @@ async function remove(task: TaskVO) {
       "删除任务",
       {
         type: "warning",
+        icon: Delete,
+        customClass: "ui-confirm-danger",
+        confirmButtonType: "danger",
+        autofocus: false,
         confirmButtonText: "确认删除",
         cancelButtonText: "取消",
       },

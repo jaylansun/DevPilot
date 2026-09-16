@@ -78,6 +78,11 @@
     --el-color-success-light-9: #eff9f4;
     --el-color-warning-light-9: #fff8eb;
     --el-color-danger-light-9: #fff0f2;
+    --el-color-danger-light-3: #a32940;
+    --el-color-danger-light-5: #d58c9a;
+    --el-color-danger-light-7: #edc7cf;
+    --el-color-danger-light-8: #f5e0e5;
+    --el-color-danger-dark-2: #8c2135;
     --el-color-info-light-9: #f2f5f9;
     --el-color-success: var(--color-success);
     --el-color-warning: var(--color-warning);
@@ -105,6 +110,7 @@
     --el-border-radius-base: 10px;
     --el-mask-color: #20293666;
     --el-mask-color-extra-light: #20293633;
+    --el-overlay-color-lighter: rgb(32 41 54 / 24%);
     --el-font-family: var(--font-sans);
     --el-font-size-base: 14px;
   }
@@ -118,10 +124,31 @@
     --el-button-disabled-text-color: #ffffff;
     box-shadow: 0 3px 8px -3px rgb(54 94 234 / 30%);
   }
-  .el-message-box { @apply max-w-[calc(100vw-32px)]; }
+  /* 组件默认 width:100%，必须同时保留桌面宽度上限，不能只限制视口边距。 */
+  .el-message-box {
+    width: min(460px, calc(100vw - 32px));
+    max-width: 100%;
+    max-height: calc(100dvh - 32px);
+    --el-messagebox-font-size: 20px;
+    --el-messagebox-content-font-size: 15px;
+    --el-messagebox-font-line-height: 1.8;
+    @apply rounded-[20px] border border-line/60 bg-surface p-6 shadow-float overflow-y-auto max-mobile:p-5;
+  }
+  .el-message-box__header { @apply pb-3; }
+  .el-message-box__title { @apply font-semibold leading-7; }
+  .el-message-box__container { @apply items-start gap-3; }
+  .el-message-box__status { @apply mt-1 shrink-0; }
+  .el-message-box__btns { @apply gap-3 pt-6; }
+  .el-message-box__btns .el-button + .el-button { @apply ml-0; }
+  .el-message-box__btns .el-button { @apply min-w-22; }
+  .el-message-box__headerbtn { @apply top-3 right-3 rounded-lg; }
+  .ui-confirm-danger .el-message-box__status { @apply text-danger; }
+  .el-message-box__headerbtn:focus-visible, .ui-dialog .el-dialog__headerbtn:focus-visible {
+    @apply outline-2 outline-focus outline-offset-2;
+  }
   .el-dialog__body { @apply text-ink; }
   .el-dialog { box-shadow: 0 32px 100px -24px rgb(32 41 54 / 26%); }
-  .el-overlay { backdrop-filter: blur(4px); }
+  .el-overlay { backdrop-filter: blur(3px); }
   .el-input__wrapper, .el-textarea__inner { @apply transition-shadow duration-150; }
   .ui-muted { @apply text-[15px] text-muted leading-[1.8]; }
   .ui-eyebrow { @apply mb-3 text-xs font-medium text-brand; }
@@ -131,7 +158,14 @@
   .ui-page-heading .ui-muted { @apply mb-0; }
   .ui-page-heading > .el-button { @apply shrink-0; }
   .ui-panel { @apply min-w-0 rounded-[20px] border border-line/60 bg-surface p-7 shadow-soft max-mobile:p-5; }
-  .ui-dialog { @apply max-w-[calc(100vw-32px)] rounded-[24px] border-0 p-7; }
+  .ui-dialog { @apply flex max-h-[calc(100dvh-32px)] max-w-[calc(100vw-32px)] flex-col rounded-[24px] border border-line/60 p-7 max-mobile:p-5; }
+  .ui-dialog .el-dialog__header { @apply shrink-0 pb-5; }
+  .ui-dialog .el-dialog__title { @apply text-xl font-semibold leading-7; }
+  .ui-dialog .el-dialog__headerbtn { @apply top-3 right-3 rounded-lg; }
+  .ui-dialog .el-dialog__body { @apply min-h-0 overflow-y-auto overscroll-contain; }
+  .ui-dialog .el-dialog__footer { @apply mt-5 flex shrink-0 justify-end gap-3 border-t border-line/70 pt-5; }
+  .ui-dialog .el-dialog__footer .el-button + .el-button { @apply ml-0; }
+  .ui-dialog .ui-field:last-child { @apply mb-0; }
   .ui-field { @apply mb-6; }
   .ui-field > label { @apply mb-2.5 block text-sm font-medium text-ink; }
   .ui-field .el-input__wrapper { @apply min-h-11; }

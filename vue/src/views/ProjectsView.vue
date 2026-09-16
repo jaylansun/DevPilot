@@ -79,6 +79,10 @@ async function removeProject(project: ProjectVO) {
         confirmButtonText: "确认删除",
         cancelButtonText: "取消",
         type: "warning",
+        icon: Delete,
+        customClass: "ui-confirm-danger",
+        confirmButtonType: "danger",
+        autofocus: false,
       },
     );
   } catch {

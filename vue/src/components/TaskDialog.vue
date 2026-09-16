@@ -90,6 +90,7 @@ async function refreshConflict() {
         confirmButtonText: "载入最新内容",
         cancelButtonText: "继续保留草稿",
         type: "warning",
+        autofocus: false,
       },
     );
   } catch {
@@ -136,7 +137,9 @@ async function save() {
     :model-value="modelValue"
     :title="taskId ? '编辑任务' : '新建任务'"
     width="640px"
-    class="ui-dialog [&_.ui-field]:mb-5 [&_.ui-error_p:last-child]:mb-0 max-mobile:mt-[5vh]"
+    class="ui-dialog [&_.ui-field]:mb-5 [&_.ui-error_p:last-child]:mb-0"
+    align-center
+    append-to-body
     :close-on-click-modal="false"
     :close-on-press-escape="!saving"
     :show-close="!saving"

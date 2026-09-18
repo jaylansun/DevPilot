@@ -18,6 +18,7 @@ const formError = ref("");
 const composing = ref(false);
 const chatPanel = ref<HTMLElement | null>(null);
 const panelHeight = ref(360);
+const compactPanel = computed(() => panelHeight.value < 560);
 const questionInput = ref<HTMLTextAreaElement | null>(null);
 const messageViewport = ref<HTMLElement | null>(null);
 const followingLatest = ref(true);
@@ -53,7 +54,7 @@ function updatePanelHeight() {
   if (!panel || !active) return;
   // 使用文档坐标，让页面滚动不会改变面板高度；短横屏保留可操作的最小空间。
   const documentTop = panel.getBoundingClientRect().top + window.scrollY;
-  const bottomGutter = window.innerWidth < 680 ? 16 : 20;
+  const bottomGutter = 16;
   panelHeight.value = Math.max(360, Math.floor(window.innerHeight - documentTop - bottomGutter));
 }
 
@@ -104,6 +105,8 @@ async function scrollToLatest(smooth = false) {
 }
 
 async function followLatestIfNeeded() {
+  // 空态没有“最新消息”，不要把欢迎内容自动滚出可视区域。
+  if (!turns.value.length) return;
   // 只有仍停留在最新消息处才跟随新内容，用户上翻阅读时保留位置。
   if (followingLatest.value) await scrollToLatest();
   else showLatestButton.value = !!turns.value.length;
@@ -258,7 +261,7 @@ onBeforeUnmount(() => {
   <section
     ref="chatPanel"
     aria-label="项目知识库问答"
-    class="flex min-h-0 flex-col rounded-[28px] bg-surface pt-3 text-ink max-mobile:rounded-[20px] max-mobile:pt-1"
+    class="flex min-h-0 flex-col rounded-[20px] bg-surface pt-2 text-ink max-mobile:pt-1"
     :style="{ height: panelHeight + 'px' }"
   >
     <header class="mx-auto flex w-full max-w-[940px] shrink-0 items-center justify-between gap-3 px-6 py-1 max-mobile:px-2">
@@ -314,11 +317,13 @@ onBeforeUnmount(() => {
           </template>
         </div>
 
-        <div v-if="!turns.length" class="mx-auto flex w-full max-w-[760px] flex-1 flex-col items-center justify-center px-6 pb-7 pt-2 text-center max-mobile:px-2 max-mobile:pb-4">
-          <div class="size-[110px] shrink-0 max-mobile:size-[88px]"><AiPresence /></div>
-          <h3 class="mb-0 mt-3 text-[32px] leading-[1.35] font-semibold tracking-[-0.03em] text-balance max-mobile:mt-2 max-mobile:text-[28px]">让资料回答你的问题</h3>
-          <p class="mb-0 mt-2 text-[15px] leading-7 text-muted max-mobile:text-sm">梳理需求，核对规则，找到原文依据。</p>
-          <div class="mt-6 flex flex-wrap justify-center gap-2.5 max-mobile:mt-4 max-mobile:gap-2" aria-label="推荐问题">
+        <div v-if="!turns.length" class="mx-auto flex w-full max-w-[760px] flex-1 flex-col items-center justify-center px-6 text-center max-mobile:px-2" :class="compactPanel ? 'pb-2 pt-1' : 'pb-4 pt-2'">
+          <div class="flex items-center" :class="compactPanel ? 'gap-3 max-mobile:gap-2' : 'flex-col'">
+            <div class="shrink-0" :class="compactPanel ? 'size-8' : 'size-[88px] max-mobile:size-[72px]'"><AiPresence /></div>
+            <h3 class="mb-0 leading-[1.35] font-semibold tracking-[-0.03em] text-balance" :class="compactPanel ? 'mt-0 text-2xl max-mobile:text-xl' : 'mt-3 text-[28px] max-mobile:mt-2 max-mobile:text-2xl'">让资料回答你的问题</h3>
+          </div>
+          <p class="mb-0 mt-2 text-[15px] text-muted max-mobile:text-sm" :class="compactPanel ? 'leading-6' : 'leading-7'">梳理需求，核对规则，找到原文依据。</p>
+          <div class="flex flex-wrap justify-center gap-2.5 max-mobile:gap-2" :class="compactPanel ? 'mt-2' : 'mt-5 max-mobile:mt-4'" aria-label="推荐问题">
             <button
               v-for="suggestion in suggestions"
               :key="suggestion.title"

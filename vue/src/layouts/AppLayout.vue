@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, ref } from "vue";
+import { nextTick, ref } from "vue";
 import { useRoute, useRouter } from "vue-router";
 import { FolderOpened, SwitchButton, CircleCheck, ArrowLeft, ArrowRight } from "@element-plus/icons-vue";
 import BrandMark from "@/components/BrandMark.vue";
@@ -15,10 +15,6 @@ async function toggleSidebar() {
   await nextTick();
   sidebarToggle.value?.focus({ preventScroll: true });
 }
-const pageTitle = computed(() => {
-  const tabs: Record<string, string> = { tasks: "任务看板", documents: "知识库", chat: "AI 问答", planning: "任务规划", assistant: "需求检查" };
-  return route.name === "project" ? tabs[String(route.query.tab)] || "项目概览" : route.meta.title;
-});
 function signOut() {
   auth.clearSession();
   void router.replace("/login");
@@ -56,13 +52,14 @@ function signOut() {
       </div>
     </aside>
     <div class="flex min-w-0 flex-1 flex-col">
-      <header class="flex min-h-16 items-center justify-between gap-4 px-10 max-mobile:min-h-12 max-mobile:px-4" :class="{ 'max-mobile:hidden': route.name === 'project' }">
+      <header v-if="route.name !== 'project'" class="flex min-h-16 items-center justify-between gap-4 px-10 max-mobile:min-h-12 max-mobile:px-4">
         <div class="flex min-w-0 items-center gap-3 text-[13px] text-muted">
-          <RouterLink v-if="route.name === 'project'" to="/projects" class="ui-interactive hover:text-brand">我的项目</RouterLink><span v-else>个人工作区</span><span class="text-muted/60" aria-hidden="true">/</span><span class="text-ink">{{ pageTitle }}</span>
+          <span>个人工作区</span><span class="text-muted/60" aria-hidden="true">/</span><span class="text-ink">{{ route.meta.title }}</span>
         </div>
         <span class="text-xs text-muted max-mobile:hidden">DevPilot</span>
       </header>
-      <main id="main-content" tabindex="-1" class="mx-auto flex w-full max-w-[1560px] min-w-0 flex-1 flex-col px-10 pb-8 pt-5 outline-none max-mobile:px-4 max-mobile:pb-4 max-mobile:pt-3">
+      <main id="main-content" tabindex="-1" class="mx-auto flex w-full max-w-[1560px] min-w-0 flex-1 flex-col outline-none max-mobile:px-4 max-mobile:pb-4 max-mobile:pt-3"
+        :class="route.name === 'project' ? 'px-6 pb-4 pt-4' : 'px-10 pb-8 pt-5'">
         <RouterView v-slot="{ Component }"><Transition name="page" mode="out-in"><component :is="Component" :key="route.path" /></Transition></RouterView>
       </main>
     </div>

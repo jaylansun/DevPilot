@@ -165,7 +165,7 @@ test("任务规划入口展示只读草案、验收依赖和安全引用，双�
   await expect(
     navigation.getByRole("link", { name: "任务规划", exact: true }),
   ).toHaveAttribute("aria-current", "page");
-  await expect(page.locator("header").first()).toContainText("任务规划");
+  await expect(page.getByRole("heading", { name: "把目标变成可执行的计划", exact: true })).toBeVisible();
   await navigation.getByRole("link", { name: "项目概览", exact: true }).click();
   await navigation.getByRole("link", { name: "任务规划", exact: true }).click();
   await expect(page).toHaveURL(`/projects/${id}?tab=planning`);

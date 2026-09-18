@@ -51,12 +51,12 @@ onMounted(loadProject);
       <el-button :icon="Refresh" @click="loadProject">重新加载</el-button>
     </div>
     <template v-else-if="project">
-      <div class="mb-6 flex items-center justify-between gap-4 max-mobile:mb-4">
-        <div class="min-w-0">
-          <RouterLink to="/projects" class="ui-interactive mb-1 inline-flex min-h-8 items-center gap-2 text-xs text-muted hover:text-brand"><el-icon><Back /></el-icon>返回我的项目</RouterLink>
-          <h1 class="mb-0 text-[30px] wrap-anywhere max-mobile:text-[22px]">{{ project.name }}</h1>
+      <div class="mb-3 flex shrink-0 items-center justify-between gap-3">
+        <div class="flex min-w-0 items-center gap-3 max-mobile:gap-2">
+          <RouterLink to="/projects" aria-label="返回我的项目" title="返回我的项目" class="ui-interactive grid size-11 shrink-0 place-items-center rounded-xl border border-line/70 bg-surface text-muted hover:border-brand/30 hover:text-brand"><el-icon :size="18" aria-hidden="true"><Back /></el-icon></RouterLink>
+          <h1 :title="project.name" class="mb-0 min-w-0 line-clamp-2 text-2xl wrap-anywhere max-mobile:text-xl">{{ project.name }}</h1>
         </div>
-        <el-button text :icon="Edit" @click="editing = true">编辑项目</el-button>
+        <el-button class="shrink-0" text :icon="Edit" @click="editing = true">编辑项目</el-button>
       </div>
       <ProjectTabs />
       <Transition name="content" mode="out-in">

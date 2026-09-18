@@ -16,7 +16,7 @@ async function toggleSidebar() {
   sidebarToggle.value?.focus({ preventScroll: true });
 }
 const pageTitle = computed(() => {
-  const tabs: Record<string, string> = { tasks: "任务看板", documents: "知识库", chat: "AI 问答", planning: "任务规划" };
+  const tabs: Record<string, string> = { tasks: "任务看板", documents: "知识库", chat: "AI 问答", planning: "任务规划", assistant: "需求检查" };
   return route.name === "project" ? tabs[String(route.query.tab)] || "项目概览" : route.meta.title;
 });
 function signOut() {

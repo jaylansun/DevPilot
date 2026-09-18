@@ -42,10 +42,23 @@ class PlanningReadService:
         self.tool_calls: list[dict] = []
         self.board_task_count = 0
         self.existing_titles: list[str] = []
+        self.ready_documents: dict[UUID, str] = {}
         self._lock = asyncio.Lock()
         self._snapshot: tuple | None = None
         self._scope: tuple[UUID, UUID] | None = None
         self._source_ids: dict[tuple[UUID, int], int] = {}
+
+    def fork(self) -> "PlanningReadService":
+        """复用已检查的基线，但独立持有会话、锁与读取结果，供并行节点使用。"""
+        if self._snapshot is None:
+            raise RuntimeError("必须先建立读取基线")
+        reader = PlanningReadService(
+            self.session_factory, self.index_service, self.min_score
+        )
+        reader._snapshot = self._snapshot
+        reader._scope = self._scope
+        reader.ready_documents = dict(self.ready_documents)
+        return reader
 
     @staticmethod
     def _changed() -> ApiError:
@@ -134,6 +147,7 @@ class PlanningReadService:
         if self._snapshot is None:
             self._snapshot = current.snapshot
             self._scope = scope
+            self.ready_documents = dict(current.ready_documents)
         elif self._scope != scope or self._snapshot != current.snapshot:
             raise self._changed()
 

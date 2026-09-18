@@ -10,6 +10,7 @@ import TaskBoard from "@/components/TaskBoard.vue";
 import DocumentLibrary from "@/components/DocumentLibrary.vue";
 import KnowledgeChat from "@/components/KnowledgeChat.vue";
 import TaskPlanning from "@/components/TaskPlanning.vue";
+import RequirementCheck from "@/components/RequirementCheck.vue";
 import ProjectTabs from "@/components/ProjectTabs.vue";
 import type { ProjectVO } from "@/types/api";
 
@@ -18,7 +19,7 @@ const project = ref<ProjectVO | null>(null);
 const loading = ref(true);
 const error = ref("");
 const editing = ref(false);
-const activeComponent = computed(() => ({ tasks: TaskBoard, documents: DocumentLibrary, chat: KnowledgeChat, planning: TaskPlanning })[String(route.query.tab) as "tasks" | "documents" | "chat" | "planning"]);
+const activeComponent = computed(() => ({ tasks: TaskBoard, documents: DocumentLibrary, chat: KnowledgeChat, planning: TaskPlanning, assistant: RequirementCheck })[String(route.query.tab) as "tasks" | "documents" | "chat" | "planning" | "assistant"]);
 
 async function loadProject() {
   loading.value = true;
@@ -70,6 +71,7 @@ onMounted(loadProject);
         <aside class="space-y-5">
           <div class="p-1">
             <h2 class="mb-4 text-base">继续推进项目</h2>
+            <RouterLink :to="{path: route.path, query: {tab: 'assistant'}}" class="ui-interactive mb-2 flex min-h-12 items-center gap-3 rounded-xl bg-white px-4 text-sm hover:text-brand hover:shadow-soft"><el-icon><Aim /></el-icon>检查需求与任务缺口</RouterLink>
             <RouterLink :to="{path: route.path, query: {tab: 'documents'}}" class="ui-interactive mb-2 flex min-h-12 items-center gap-3 rounded-xl bg-white px-4 text-sm hover:text-brand hover:shadow-soft"><el-icon><Files /></el-icon>管理项目资料</RouterLink>
             <RouterLink :to="{path: route.path, query: {tab: 'chat'}}" class="ui-interactive mb-2 flex min-h-12 items-center gap-3 rounded-xl bg-white px-4 text-sm hover:text-brand hover:shadow-soft"><el-icon><ChatDotRound /></el-icon>向项目知识提问</RouterLink>
             <RouterLink :to="{path: route.path, query: {tab: 'planning'}}" class="ui-interactive flex min-h-12 items-center gap-3 rounded-xl bg-white px-4 text-sm hover:text-brand hover:shadow-soft"><el-icon><Aim /></el-icon>生成行动方案</RouterLink>

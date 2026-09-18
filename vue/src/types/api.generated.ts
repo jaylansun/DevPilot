@@ -228,6 +228,40 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/projects/{project_id}/assistant": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+
+    get: operations["workflow_info_api_v1_projects__project_id__assistant_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/projects/{project_id}/assistant/runs": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+
+    post: operations["run_workflow_api_v1_projects__project_id__assistant_runs_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/": {
     parameters: {
       query?: never;
@@ -270,6 +304,16 @@ export interface components {
       file: string;
     };
 
+    CoveredRequirementVO: {
+      requirement: string;
+
+      explanation: string;
+
+      source_ids: number[];
+
+      task_ids: string[];
+    };
+
     DocumentListVO: {
       items: components["schemas"]["DocumentVO"][];
 
@@ -280,8 +324,19 @@ export interface components {
       max_size_bytes: number;
     };
 
+    DocumentScopeVO: {
+      document_id: string;
+
+      filename: string;
+    };
+
     DocumentStatus:
-      "queued" | "indexing" | "ready" | "failed" | "deleting" | "delete_failed";
+      | "queued"
+      | "indexing"
+      | "ready"
+      | "failed"
+      | "deleting"
+      | "delete_failed";
 
     DocumentVO: {
       id: string;
@@ -300,6 +355,20 @@ export interface components {
       created_at: string;
 
       updated_at: string;
+    };
+
+    GapReportVO: {
+      summary: string;
+
+      covered: components["schemas"]["CoveredRequirementVO"][];
+
+      missing: components["schemas"]["RequirementEvidenceVO"][];
+
+      questions: components["schemas"]["RequirementQuestionVO"][];
+
+      reviewed_source_ids: number[];
+
+      insufficient_evidence: boolean;
     };
 
     HTTPValidationError: {
@@ -431,6 +500,22 @@ export interface components {
       text: string;
     };
 
+    RequirementEvidenceVO: {
+      requirement: string;
+
+      explanation: string;
+
+      source_ids: number[];
+    };
+
+    RequirementQuestionVO: {
+      question: string;
+
+      reason: string;
+
+      source_ids: number[];
+    };
+
     TaskCreateQO: {
       title: string;
 
@@ -457,6 +542,23 @@ export interface components {
       dependencies: string[];
 
       source_ids: number[];
+    };
+
+    TaskEvidenceVO: {
+      id: string;
+
+      title: string;
+      status: components["schemas"]["TaskStatus"];
+
+      priority: number;
+
+      description: string;
+
+      acceptance_criteria: string;
+
+      description_truncated: boolean;
+
+      acceptance_criteria_truncated: boolean;
     };
 
     TaskPageVO: {
@@ -548,6 +650,73 @@ export interface components {
       input?: unknown;
 
       ctx?: Record<string, never>;
+    };
+
+    WorkflowInfoVO: {
+      mode: "mock" | "live";
+
+      configured: boolean;
+
+      ready_documents: number;
+
+      task_count: number;
+    };
+
+    WorkflowRequestQO: {
+      message: string;
+
+      intent:
+        | "auto"
+        | "knowledge_question"
+        | "task_lookup"
+        | "requirement_check";
+    };
+
+    WorkflowResultVO: {
+      intent:
+        | "knowledge_question"
+        | "task_lookup"
+        | "requirement_check"
+        | "clarify";
+
+      mode: "mock" | "live";
+
+      status:
+        | "reviewed"
+        | "answered"
+        | "insufficient_evidence"
+        | "demo"
+        | "clarification_needed";
+
+      answer: string;
+      report?: components["schemas"]["GapReportVO"] | null;
+
+      tasks: components["schemas"]["TaskEvidenceVO"][];
+
+      sources: components["schemas"]["RagSourceVO"][];
+      scope: components["schemas"]["WorkflowScopeVO"];
+
+      tool_calls: components["schemas"]["ToolCallVO"][];
+
+      persisted: false;
+    };
+
+    WorkflowScopeVO: {
+      ready_documents: components["schemas"]["DocumentScopeVO"][];
+
+      retrieved_source_count: number;
+
+      document_search_performed: boolean;
+
+      full_document_review: false;
+
+      board_read: boolean;
+
+      tasks: components["schemas"]["TaskEvidenceVO"][];
+
+      task_details_truncated: boolean;
+
+      limitation: string;
     };
   };
   responses: never;
@@ -1173,6 +1342,70 @@ export interface operations {
         };
         content: {
           "application/json": components["schemas"]["PlanResultVO"];
+        };
+      };
+
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  workflow_info_api_v1_projects__project_id__assistant_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        project_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkflowInfoVO"];
+        };
+      };
+
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  run_workflow_api_v1_projects__project_id__assistant_runs_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        project_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["WorkflowRequestQO"];
+      };
+    };
+    responses: {
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["WorkflowResultVO"];
         };
       };
 

@@ -25,3 +25,6 @@ export type PlanResultVO = components["schemas"]["PlanResultVO"];
 export type PlanProposalVO = components["schemas"]["PlanProposalVO"];
 export type TaskDraftVO = components["schemas"]["TaskDraftVO"];
 export type ToolCallVO = components["schemas"]["ToolCallVO"];
+export type WorkflowRequestQO = components["schemas"]["WorkflowRequestQO"];
+export type WorkflowInfoVO = components["schemas"]["WorkflowInfoVO"];
+export type WorkflowResultVO = components["schemas"]["WorkflowResultVO"];

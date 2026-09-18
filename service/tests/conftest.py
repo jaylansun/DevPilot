@@ -11,6 +11,7 @@ from app.api.v1.plan_controller import router as plan_router
 from app.api.v1.project_controller import router as projects_router
 from app.api.v1.rag_controller import router as rag_router
 from app.api.v1.task_controller import router as tasks_router
+from app.api.v1.workflow_controller import router as workflow_router
 from app.database import get_db_session
 from app.middleware import request_id_middleware
 from app.middleware.upload_limit_middleware import UploadLimitMiddleware
@@ -49,6 +50,7 @@ def api_app_factory() -> Callable[[UserDO | None], FastAPI]:
         app.include_router(documents_router, prefix="/api/v1")
         app.include_router(rag_router, prefix="/api/v1")
         app.include_router(plan_router, prefix="/api/v1")
+        app.include_router(workflow_router, prefix="/api/v1")
 
         async def override_database_session():
             yield object()

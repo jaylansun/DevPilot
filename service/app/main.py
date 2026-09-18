@@ -18,6 +18,8 @@ from app.services.plan_agent_service import PlanAgentService
 from app.services.plan_service import PlanService
 from app.services.rag_model_service import RagModelService
 from app.services.rag_service import RagService
+from app.services.workflow_model_service import WorkflowModelService
+from app.services.workflow_service import WorkflowService
 
 settings = get_settings()
 
@@ -30,6 +32,10 @@ async def lifespan(application: FastAPI):
     )
     application.state.plan_service = PlanService(
         settings, index_service, AsyncSessionFactory, PlanAgentService(settings)
+    )
+    application.state.workflow_service = WorkflowService(
+        settings, index_service, AsyncSessionFactory,
+        WorkflowModelService(settings), RagModelService(settings),
     )
     worker = DocumentWorkerService(AsyncSessionFactory, index_service)
     task = asyncio.create_task(worker.run(), name="document-index-worker")

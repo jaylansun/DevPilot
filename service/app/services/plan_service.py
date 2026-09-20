@@ -146,8 +146,16 @@ class PlanService:
             ToolCallLimitExceededError,
             GraphRecursionError,
         ) as exc:
+            logger.warning(
+                "任务规划达到调用限制；异常类型=%s；调用次数=%s；上限=%s",
+                type(exc).__name__,
+                getattr(exc, "run_count", None),
+                getattr(exc, "run_limit", None),
+            )
             raise ApiError(
-                502, "planning_limit", "规划已达到调用次数上限，请缩小目标范围后重试"
+                502,
+                "planning_limit",
+                "本次规划未能在限定步骤内完成，请重试或缩小目标范围",
             ) from exc
         except (ValidationError, StructuredOutputError) as exc:
             raise ApiError(

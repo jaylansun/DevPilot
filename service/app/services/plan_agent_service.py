@@ -18,6 +18,7 @@ from langchain_openai import ChatOpenAI
 from app.config import Settings
 from app.errors import ApiError
 from app.schemas.plan_vo import PlanProposalVO, TaskDraftVO, normalize_task_title
+from app.services.run_stream_service import trace
 from app.tools.planning_tools import PLANNING_TOOLS, PlanToolContext
 
 MAX_DOCUMENT_SEARCHES = 3
@@ -41,18 +42,24 @@ source_ids 只能使用 search_documents 实际返回的引用编号，至少一
 只用文本，不使用 HTML。结构化结果通过 PlanProposalVO 返回。
 """
 
-PLAN_PROMPT = PLAN_RULES + """
+PLAN_PROMPT = (
+    PLAN_RULES
+    + """
 先调用 search_documents 检索当前项目相关资料，并调用 read_task_board 读取现有任务，再生成方案。
 先完成这两个必要读取，再判断是否补充检索；文档检索最多三次，看板无需重复读取。
 已有足够依据时立即提交 PlanProposalVO，不必用完检索次数；只能使用当前提供的工具。
 """
+)
 
-FINAL_PLAN_PROMPT = PLAN_RULES + """
+FINAL_PLAN_PROMPT = (
+    PLAN_RULES
+    + """
 当前已完成资料与任务看板读取，下面的 JSON 是服务端整理的用户目标与实际工具读取结果。
 读取阶段已经结束，不能再次调用 search_documents 或 read_task_board。
 现在必须调用唯一可用的 PlanProposalVO 工具提交最终草案，不要继续检索或输出普通聊天文本。
 只规划本次资料足以支持的任务，未知内容列为假设或风险，不要求覆盖整份文档。
 """
+)
 
 
 class PlanningProgressMiddleware(AgentMiddleware):
@@ -95,7 +102,9 @@ class PlanningProgressMiddleware(AgentMiddleware):
                 request.override(
                     tools=[],
                     system_message=SystemMessage(content=FINAL_PLAN_PROMPT),
-                    messages=[HumanMessage(content=json.dumps(evidence, ensure_ascii=False))],
+                    messages=[
+                        HumanMessage(content=json.dumps(evidence, ensure_ascii=False))
+                    ],
                 )
             )
             if any(
@@ -104,17 +113,13 @@ class PlanningProgressMiddleware(AgentMiddleware):
                 if isinstance(message, AIMessage)
                 for call in message.tool_calls
             ):
-                raise ApiError(
-                    502, "invalid_plan", "模型未按要求提交任务草案，请重试"
-                )
+                raise ApiError(502, "invalid_plan", "模型未按要求提交任务草案，请重试")
             return response
         # 资料足够时可直接提交，否则只允许补充检索；ToolStrategy 会添加结果工具。
         return await handler(
             request.override(
                 tools=[
-                    tool
-                    for tool in request.tools
-                    if tool.name == "search_documents"
+                    tool for tool in request.tools if tool.name == "search_documents"
                 ]
             )
         )
@@ -147,10 +152,12 @@ def build_planning_agent(model):
 def build_planning_model(settings: Settings):
     # MiMo 官方建议工具调用关闭深度思考，避免推理挤占本流程的输出预算与时限。
     # 仅适配明确支持此参数的官方接口，其他 OpenAI 兼容供应商保持原配置。
-    mimo = (
-        urlsplit(settings.llm_base_url).hostname == "api.xiaomimimo.com"
-        and settings.model_name in {"mimo-v2.5", "mimo-v2.5-pro"}
-    )
+    mimo = urlsplit(
+        settings.llm_base_url
+    ).hostname == "api.xiaomimimo.com" and settings.model_name in {
+        "mimo-v2.5",
+        "mimo-v2.5-pro",
+    }
     return ChatOpenAI(
         model=settings.model_name,
         api_key=settings.llm_api_key.get_secret_value(),
@@ -217,10 +224,14 @@ class PlanAgentService:
 
     async def generate(self, goal: str, context: PlanToolContext) -> PlanProposalVO:
         if self.settings.ai_mode == "mock":
-            await context.reader.search_documents(
-                context.owner_id, context.project_id, goal
-            )
-            await context.reader.read_task_board(context.owner_id, context.project_id)
+            async with trace("search_documents", kind="tool"):
+                await context.reader.search_documents(
+                    context.owner_id, context.project_id, goal
+                )
+            async with trace("read_task_board", kind="tool"):
+                await context.reader.read_task_board(
+                    context.owner_id, context.project_id
+                )
             if not context.reader.sources:
                 raise ApiError(
                     409,

@@ -6,6 +6,8 @@ from fastapi import APIRouter, Depends, Request
 from app.api.dependencies import DatabaseSession, MemberUser
 from app.schemas.workflow_qo import WorkflowRequestQO
 from app.schemas.workflow_vo import WorkflowInfoVO, WorkflowResultVO
+from app.services.document_service import require_document_project
+from app.services.run_stream_service import NDJSONResponse, stream_response
 from app.services.workflow_service import WorkflowService
 
 router = APIRouter(
@@ -41,3 +43,24 @@ async def run_workflow(
     workflow: WorkflowDependency,
 ):
     return await workflow.run(session, current_user.id, project_id, body)
+
+
+@router.post(
+    "/runs/stream",
+    response_class=NDJSONResponse,
+    summary="流式需求检查：NDJSON v1 事件",
+)
+async def stream_workflow(
+    project_id: UUID,
+    body: WorkflowRequestQO,
+    request: Request,
+    session: DatabaseSession,
+    current_user: MemberUser,
+    workflow: WorkflowDependency,
+):
+    await require_document_project(session, current_user.id, project_id)
+    return stream_response(
+        lambda: workflow.run(session, current_user.id, project_id, body),
+        "workflow",
+        request.state.request_id,
+    )

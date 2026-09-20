@@ -1,3 +1,4 @@
+import { finalResponse } from "./stream_helpers";
 import { randomUUID } from "node:crypto";
 import { test, expect, type Page } from "@playwright/test";
 import type { WorkflowResultVO } from "../../src/types/api";
@@ -118,7 +119,7 @@ async function setup(page: Page) {
           task_count: 1,
         },
       });
-    if (request.method() === "POST" && path.endsWith("/assistant/runs")) {
+    if (request.method() === "POST" && path.endsWith("/assistant/runs/stream")) {
       state.calls.push(request.postDataJSON());
       const response = structuredClone(state.result),
         failure = state.failure,
@@ -138,7 +139,7 @@ async function setup(page: Page) {
                   },
                 },
               }
-            : { json: response },
+            : finalResponse("workflow", response),
         );
       } finally {
         state.completed++;

@@ -5,6 +5,7 @@ from langchain.tools import ToolRuntime, tool
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.services.planning_read_service import PlanningReadService
+from app.services.run_stream_service import trace
 
 
 @dataclass(frozen=True)
@@ -35,16 +36,20 @@ class _SearchDocumentsInput(_ReadToolInput):
 async def search_documents(query: str, runtime: ToolRuntime[PlanToolContext]) -> dict:
     """只读检索当前项目已就绪文档，返回带稳定引用编号的原文片段；无资料时明确返回空结果。"""
     context = runtime.context
-    return await context.reader.search_documents(
-        context.owner_id, context.project_id, query
-    )
+    async with trace("search_documents", kind="tool"):
+        return await context.reader.search_documents(
+            context.owner_id, context.project_id, query
+        )
 
 
 @tool(args_schema=_ReadToolInput)
 async def read_task_board(runtime: ToolRuntime[PlanToolContext]) -> dict:
     """只读当前项目全部任务的标题、状态、优先级及说明，用于避免重复规划；不接受额外参数。"""
     context = runtime.context
-    return await context.reader.read_task_board(context.owner_id, context.project_id)
+    async with trace("read_task_board", kind="tool"):
+        return await context.reader.read_task_board(
+            context.owner_id, context.project_id
+        )
 
 
 PLANNING_TOOLS = [search_documents, read_task_board]

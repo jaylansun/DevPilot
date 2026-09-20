@@ -26,10 +26,10 @@ if (result.error || result.status !== 0) {
   process.exit(1);
 }
 const schema = JSON.parse(result.stdout);
-const source = astToString(await openapiTS(schema)).replace(
-  /\/\*\*[\s\S]*?\*\//g,
-  "",
-);
+const source = astToString(await openapiTS(schema))
+  .replace(/\/\*\*[\s\S]*?\*\//g, "")
+  .replace(/[ \t]+$/gm, "")
+  .replace(/^( +)/gm, (indent) => " ".repeat(indent.length / 2));
 const target = new URL("../src/types/api.generated.ts", import.meta.url);
 await mkdir(new URL("../src/types/", import.meta.url), { recursive: true });
 await writeFile(

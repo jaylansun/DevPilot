@@ -1,0 +1,155 @@
+{
+  "version": 1,
+  "steps": [
+    "retrieve_knowledge",
+    "answer_knowledge",
+    "validate_result",
+    "classify_intent",
+    "load_lookup_board",
+    "answer_lookup",
+    "retrieve_documents",
+    "load_task_board",
+    "generate_report",
+    "clarify",
+    "draft_proposal",
+    "search_documents",
+    "read_task_board"
+  ],
+  "events": [
+    {
+      "version": 1,
+      "seq": 1,
+      "request_id": "contract-test",
+      "type": "token",
+      "text": "中文🙂"
+    },
+    {
+      "version": 1,
+      "seq": 1,
+      "request_id": "contract-test",
+      "type": "node",
+      "id": "step1",
+      "name": "answer_knowledge",
+      "status": "started"
+    },
+    {
+      "version": 1,
+      "seq": 1,
+      "request_id": "contract-test",
+      "type": "node",
+      "id": "step1",
+      "name": "answer_knowledge",
+      "status": "completed"
+    },
+    {
+      "version": 1,
+      "seq": 1,
+      "request_id": "contract-test",
+      "type": "tool",
+      "id": "step2",
+      "name": "search_documents",
+      "status": "failed"
+    },
+    {
+      "version": 1,
+      "seq": 1,
+      "request_id": "contract-test",
+      "type": "error",
+      "status": 502,
+      "error": {
+        "code": "rag_unavailable",
+        "message": "请重试",
+        "request_id": "contract-test",
+        "details": null
+      }
+    },
+    {
+      "version": 1,
+      "seq": 1,
+      "request_id": "contract-test",
+      "type": "final",
+      "kind": "knowledge",
+      "result": {
+        "answer": "资料不足",
+        "sources": [],
+        "status": "insufficient_evidence",
+        "mode": "mock"
+      }
+    },
+    {
+      "version": 1,
+      "seq": 1,
+      "request_id": "contract-test",
+      "type": "final",
+      "kind": "planning",
+      "result": {
+        "mode": "mock",
+        "proposal": {
+          "summary": "完善订单功能",
+          "assumptions": [
+            "支付方式需人工确认"
+          ],
+          "risks": [
+            "需求范围仍需确认"
+          ],
+          "tasks": [
+            {
+              "draft_id": "T1",
+              "title": "实现下单校验",
+              "description": "校验库存与地址",
+              "priority": 2,
+              "acceptance_criteria": "库存不足时返回明确错误",
+              "dependencies": [],
+              "source_ids": [
+                1
+              ]
+            },
+            {
+              "draft_id": "T2",
+              "title": "补充订单测试",
+              "description": "覆盖下单异常路径",
+              "priority": 3,
+              "acceptance_criteria": "库存不足与地址缺失用例通过",
+              "dependencies": [
+                "T1"
+              ],
+              "source_ids": []
+            }
+          ]
+        },
+        "sources": [],
+        "tool_calls": [],
+        "board_task_count": 0,
+        "persisted": false
+      }
+    },
+    {
+      "version": 1,
+      "seq": 1,
+      "request_id": "contract-test",
+      "type": "final",
+      "kind": "workflow",
+      "result": {
+        "intent": "clarify",
+        "mode": "mock",
+        "status": "clarification_needed",
+        "answer": "请明确范围",
+        "report": null,
+        "tasks": [],
+        "sources": [],
+        "scope": {
+          "ready_documents": [],
+          "retrieved_source_count": 0,
+          "document_search_performed": false,
+          "full_document_review": false,
+          "board_read": false,
+          "tasks": [],
+          "task_details_truncated": false,
+          "limitation": "仅检查本次资料"
+        },
+        "tool_calls": [],
+        "persisted": false
+      }
+    }
+  ]
+}

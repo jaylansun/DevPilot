@@ -17,6 +17,7 @@ from app.schemas.workflow_vo import (
 )
 from app.services.planning_read_service import PlanningReadService
 from app.services.rag_service import UNKNOWN_ANSWER, build_answer
+from app.services.run_stream_service import trace
 
 
 @dataclass(frozen=True)
@@ -82,7 +83,7 @@ class WorkflowGraph:
             "clarify": self.clarify,
             "validate_result": self.validate_result,
         }.items():
-            builder.add_node(name, node)
+            builder.add_node(name, self.traced_node(name, node))
         builder.add_edge(START, "classify_intent")
         builder.add_conditional_edges(
             "classify_intent",
@@ -103,6 +104,16 @@ class WorkflowGraph:
             builder.add_edge(node, "validate_result")
         builder.add_edge("validate_result", END)
         self.graph = builder.compile()
+
+    @staticmethod
+    def traced_node(name, node):
+        async def execute(state: WorkflowState, runtime: Runtime[WorkflowContext]):
+            async with trace(name):
+                if name == "classify_intent":
+                    return await node(state)
+                return await node(state, runtime)
+
+        return execute
 
     async def classify(self, state: WorkflowState):
         requested = state["requested_intent"]

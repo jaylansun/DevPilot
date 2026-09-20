@@ -23,6 +23,7 @@ from app.schemas.plan_vo import (
 )
 from app.services.document_service import require_document_project
 from app.services.planning_read_service import PlanningReadService
+from app.services.run_stream_service import trace
 from app.tools.planning_tools import PlanToolContext
 
 logger = logging.getLogger(__name__)
@@ -124,10 +125,12 @@ class PlanService:
                     self.settings.rag_min_score,
                 )
                 context = PlanToolContext(owner_id, project_id, reader)
-                proposal = await self.agent_service.generate(goal, context)
-                proposal = PlanProposalVO.model_validate(proposal.model_dump())
-                validate_proposal_sources(proposal, reader)
-                await reader.assert_unchanged(owner_id, project_id)
+                async with trace("draft_proposal"):
+                    proposal = await self.agent_service.generate(goal, context)
+                async with trace("validate_result"):
+                    proposal = PlanProposalVO.model_validate(proposal.model_dump())
+                    validate_proposal_sources(proposal, reader)
+                    await reader.assert_unchanged(owner_id, project_id)
                 return PlanResultVO(
                     mode=self.settings.ai_mode,
                     proposal=proposal,

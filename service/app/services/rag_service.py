@@ -11,6 +11,7 @@ from app.errors import ApiError
 from app.repositories.rag_repository import list_ready_documents
 from app.schemas.rag_vo import GroundedAnswerVO, RagAnswerVO, RagInfoVO, RagSourceVO
 from app.services.document_service import require_document_project
+from app.services.run_stream_service import trace
 
 logger = logging.getLogger(__name__)
 UNKNOWN_ANSWER = (
@@ -94,29 +95,30 @@ class RagService:
             raise ApiError(503, "rag_busy", "当前正在处理其他问题，请稍后再试") from exc
         try:
             async with asyncio.timeout(65):
-                chunks = await asyncio.to_thread(
-                    self.index_service.search,
-                    project_id,
-                    list(documents),
-                    question,
-                    limit=4,
-                    min_score=self.settings.rag_min_score,
-                )
-                # 等待索引锁期间，文档可能被删除或改成不可用；发送给模型前再次检查。
-                await require_document_project(session, owner_id, project_id)
-                current = await list_ready_documents(session, project_id)
-                sources = [
-                    RagSourceVO(
-                        source_id=i + 1,
-                        document_id=chunk.document_id,
-                        filename=current[chunk.document_id],
-                        chunk_index=chunk.chunk_index,
-                        heading=chunk.heading,
-                        text=chunk.text,
+                async with trace("retrieve_knowledge"):
+                    chunks = await asyncio.to_thread(
+                        self.index_service.search,
+                        project_id,
+                        list(documents),
+                        question,
+                        limit=4,
+                        min_score=self.settings.rag_min_score,
                     )
-                    for i, chunk in enumerate(chunks)
-                    if chunk.document_id in current
-                ]
+                    # 等待索引锁期间，文档可能被删除或改成不可用；发送给模型前再次检查。
+                    await require_document_project(session, owner_id, project_id)
+                    current = await list_ready_documents(session, project_id)
+                    sources = [
+                        RagSourceVO(
+                            source_id=i + 1,
+                            document_id=chunk.document_id,
+                            filename=current[chunk.document_id],
+                            chunk_index=chunk.chunk_index,
+                            heading=chunk.heading,
+                            text=chunk.text,
+                        )
+                        for i, chunk in enumerate(chunks)
+                        if chunk.document_id in current
+                    ]
                 if not sources:
                     return RagAnswerVO(
                         answer=UNKNOWN_ANSWER,
@@ -124,15 +126,19 @@ class RagService:
                         status="insufficient_evidence",
                         mode=self.settings.ai_mode,
                     )
-                result = await self.model_service.answer(question, sources)
-                answer = build_answer(result, sources, self.settings.ai_mode)
-                # 模型调用期间已删除的资料不能再作为当前有效引用返回。
-                await require_document_project(session, owner_id, project_id)
-                latest = await list_ready_documents(session, project_id)
-                if any(source.document_id not in latest for source in sources):
-                    raise ApiError(
-                        409, "knowledge_changed", "回答期间知识库发生变化，请重新提问"
-                    )
+                async with trace("answer_knowledge"):
+                    result = await self.model_service.answer(question, sources)
+                async with trace("validate_result"):
+                    answer = build_answer(result, sources, self.settings.ai_mode)
+                    # 模型调用期间已删除的资料不能再作为当前有效引用返回。
+                    await require_document_project(session, owner_id, project_id)
+                    latest = await list_ready_documents(session, project_id)
+                    if any(source.document_id not in latest for source in sources):
+                        raise ApiError(
+                            409,
+                            "knowledge_changed",
+                            "回答期间知识库发生变化，请重新提问",
+                        )
                 return answer
         except ApiError:
             raise

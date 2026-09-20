@@ -14,6 +14,10 @@ import { getPlanningInfo, proposeTasks } from "@/api/planning_api";
 import { ApiError, errorMessage } from "@/api/http_client";
 import type { PlanInfoVO, PlanResultVO, ToolCallVO } from "@/types/api";
 
+import RunTrace from "@/components/RunTrace.vue";
+import type { TraceEvent } from "@/types/stream";
+
+const trace = ref<TraceEvent[]>([]);
 const props = defineProps<{ projectId: string }>();
 const route = useRoute();
 const info = ref<PlanInfoVO | null>(null);
@@ -57,6 +61,7 @@ async function loadInfo() {
 }
 
 function clearDraft() {
+  trace.value = [];
   result.value = null;
   submittedGoal.value = "";
   formError.value = "";
@@ -102,6 +107,10 @@ async function generate() {
       props.projectId,
       { goal: text },
       controller.signal,
+      (event) => {
+        if (active && !controller.signal.aborted && requestController === controller && event.type !== "token")
+          trace.value.push(event);
+      },
     );
     if (!active || controller.signal.aborted || requestController !== controller)
       return;
@@ -211,7 +220,7 @@ onBeforeUnmount(() => {
               <p class="mt-1 mb-2 text-xs font-medium text-muted">DevPilot</p>
               <div v-if="sending" class="ui-enter">
                 <p class="m-0 text-sm font-medium leading-7">正在准备任务草案……</p>
-                <p class="mt-1 mb-0 text-sm leading-7 text-muted">已发送规划请求，正在等待完整方案。你可以取消等待，目标会保留。</p>
+                <p class="mt-1 mb-0 text-sm leading-7 text-muted">下方会实时显示读取与生成进度，草案校验完成后展示。你可以取消等待，目标会保留。</p>
               </div>
               <div v-else-if="result" class="ui-enter">
                 <p class="m-0 text-sm leading-7">已整理出 {{ result.proposal.tasks.length }} 项建议任务。先核对假设与风险，再查看任务详情。</p>
@@ -222,6 +231,7 @@ onBeforeUnmount(() => {
           </div>
         </div>
 
+        <RunTrace :events="trace" :running="sending" />
         <form class="mt-6" @submit.prevent="generate">
           <label for="planning-goal" class="mb-3 block text-sm font-medium text-ink">你想完成什么目标？</label>
           <div class="ui-interactive rounded-2xl border border-line bg-surface p-4 shadow-sm shadow-ink/3 focus-within:border-brand focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-brand focus-within:shadow-brand/10">

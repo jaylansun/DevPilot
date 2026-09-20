@@ -1,3 +1,4 @@
+import { finalResponse } from "./stream_helpers";
 import { randomUUID } from "node:crypto";
 import { test, expect, type Page } from "@playwright/test";
 
@@ -67,7 +68,7 @@ async function planning(
       });
     if (
       req.method() === "POST" &&
-      path === `/api/v1/projects/${id}/planning/proposals`
+      path === `/api/v1/projects/${id}/planning/proposals/stream`
     ) {
       state.calls++;
       state.goals.push(req.postDataJSON());
@@ -133,7 +134,7 @@ async function planning(
                   },
                 },
               }
-            : { json: response },
+            : finalResponse("planning", response),
         );
       } finally {
         state.completed++;
@@ -167,6 +168,7 @@ test("任务规划入口展示只读草案、验收依赖和安全引用，双�
   ).toHaveAttribute("aria-current", "page");
   await expect(page.getByRole("heading", { name: "把目标变成可执行的计划", exact: true })).toBeVisible();
   await navigation.getByRole("link", { name: "项目概览", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "需求说明", exact: true })).toBeVisible();
   await navigation.getByRole("link", { name: "任务规划", exact: true }).click();
   await expect(page).toHaveURL(`/projects/${id}?tab=planning`);
   await expect(page.getByRole("status")).toContainText("演示模式");

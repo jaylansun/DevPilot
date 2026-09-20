@@ -3,6 +3,9 @@ from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
 import pytest
+from langchain.agents.middleware.model_call_limit import ModelCallLimitExceededError
+from langchain.agents.middleware.tool_call_limit import ToolCallLimitExceededError
+from langgraph.errors import GraphRecursionError
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 from test_plan_schema import proposal_data
@@ -16,7 +19,7 @@ from app.models.task_do import TaskDO
 from app.models.user_do import UserDO, UserRole
 from app.schemas.plan_vo import PlanProposalVO
 from app.services.document_index_service import RetrievedChunk
-from app.services.plan_agent_service import PlanAgentService
+from app.services.plan_agent_service import PlanAgentService, build_planning_model
 from app.services.plan_service import PlanService
 
 
@@ -72,6 +75,27 @@ def test_settings_ignore_external_live_configuration(monkeypatch, overrides, exp
     ) == expected
     assert config.database_url == "postgresql+psycopg://unused"
     assert config.jwt_secret.get_secret_value() == "测试密钥"
+
+
+@pytest.mark.parametrize(
+    "model,base_url,expected",
+    [
+        ("mimo-v2.5", "https://api.xiaomimimo.com/v1", {"thinking": {"type": "disabled"}}),
+        ("mimo-v2.5-pro", "https://api.xiaomimimo.com/v1/", {"thinking": {"type": "disabled"}}),
+        ("fixture-model", "https://fixture.invalid/v1", None),
+        ("mimo-v2.5", "https://fixture.invalid/v1", None),
+        ("fixture-model", "https://api.xiaomimimo.com/v1", None),
+    ],
+)
+def test_planning_model_applies_mimo_tool_compatibility_only_to_official_models(
+    monkeypatch, model, base_url, expected
+):
+    create_model = Mock()
+    monkeypatch.setattr("app.services.plan_agent_service.ChatOpenAI", create_model)
+    build_planning_model(settings(model_name=model, llm_base_url=base_url))
+    assert create_model.call_args.kwargs["extra_body"] == expected
+    assert create_model.call_args.kwargs["max_retries"] == 0
+    assert create_model.call_args.kwargs["timeout"] == 25
 
 
 @pytest.fixture
@@ -214,6 +238,19 @@ async def test_invalid_or_stale_plan_is_rejected(planning_context, case, expecte
     [
         (TimeoutError(), "planning_timeout"),
         (RuntimeError("隐藏密钥及原文"), "planning_unavailable"),
+        (
+            ModelCallLimitExceededError(
+                thread_count=5, run_count=5, thread_limit=None, run_limit=5
+            ),
+            "planning_limit",
+        ),
+        (
+            ToolCallLimitExceededError(
+                thread_count=7, run_count=7, thread_limit=None, run_limit=6
+            ),
+            "planning_limit",
+        ),
+        (GraphRecursionError("隐藏密钥及原文"), "planning_limit"),
     ],
 )
 async def test_safe_errors_and_slot_release(planning_context, exception, code, caplog):
@@ -226,6 +263,9 @@ async def test_safe_errors_and_slot_release(planning_context, exception, code, c
             await service.create(session, owner, project, "目标")
     assert error.value.code == code
     assert "隐藏密钥" not in error.value.message + caplog.text
+    if code == "planning_limit":
+        assert type(exception).__name__ in caplog.text
+        assert "限定步骤" in error.value.message
     assert service._slots._value == 1
 
 

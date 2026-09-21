@@ -27,6 +27,9 @@ COPY alembic.ini ./
 COPY migrations ./migrations
 COPY app ./app
 COPY tests ./tests
+# 与本地测试使用同一份前端契约；由 Jenkins 的命名构建上下文提供。
+# /app 对应仓库 service，/vue 保持测试所需的兄弟目录关系。
+COPY --from=stream_contract stream.contract.json /vue/src/types/stream.contract.json
 
 CMD ["pytest", "-q"]
 

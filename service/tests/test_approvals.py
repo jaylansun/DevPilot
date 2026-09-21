@@ -13,14 +13,76 @@ from app.models.user_do import UserDO, UserRole
 from app.schemas.approval_qo import ApprovalDecisionQO
 from app.schemas.stream_vo import stream_event_adapter
 from app.services.approval_service import ApprovalService
-from app.services.plan_agent_service import PlanAgentService
+from app.services.plan_agent_service import PlanAgentService, build_planning_agent
 from app.services.plan_service import PlanService
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+from pydantic import Field
 from sqlalchemy import func, select
+from test_plan_agent import ScriptedPlanningModel, final_reply, tool_reply
 from test_planning_tools import planning_context as _planning_context
 from test_rag_model import configuration
 
 planning_context = _planning_context
+
+
+class PauseFinalPlanningModel(ScriptedPlanningModel):
+    started: asyncio.Event = Field(default_factory=asyncio.Event)
+
+    async def _agenerate(self, messages, stop=None, run_manager=None, **kwargs):
+        if self.calls == 1:
+            self.started.set()
+            await asyncio.Event().wait()
+        return self._generate(messages, stop=stop, **kwargs)
+
+
+@pytest.mark.parametrize("legacy_checkpoint", [False, True])
+async def test_resume_interrupted_agent_reloads_evidence_for_new_reader(
+    planning_context, actors, tmp_path, legacy_checkpoint
+):
+    """真实 Agent 嵌套在持久 Graph 中；恢复新旧中断记录都必须重建读取上下文。"""
+    factory, _, project_id, _, _, index, _ = planning_context
+    member, _, _ = actors
+    settings = configuration(
+        ai_mode="live",
+        model_name="fixture",
+        llm_api_key="fixture",
+        llm_base_url="https://fixture.invalid/v1",
+    )
+
+    def planner(model):
+        agent = PlanAgentService(settings)
+        agent._agent = build_planning_agent(model)
+        return PlanService(settings, index, factory, agent)
+
+    path = tmp_path / "checkpoint.sqlite"
+    model = PauseFinalPlanningModel(replies=[tool_reply(), final_reply()])
+    initial = planner(model)
+    if legacy_checkpoint:
+        # 模拟部署旧版本留下的子图检查点，验证升级后原记录也能恢复。
+        initial.agent_service._agent.checkpointer = None
+    async with AsyncSqliteSaver.from_conn_string(str(path)) as saver:
+        service = ApprovalService(factory, initial, saver)
+        conversation = await service.create(member, project_id, "完善订单流程")
+        task = asyncio.create_task(service.start(member, conversation.id))
+        await asyncio.wait_for(model.started.wait(), 3)
+        task.cancel()
+        with pytest.raises(asyncio.CancelledError):
+            await task
+        assert initial._slots._value == 1
+        assert factory.kw["bind"].pool.checkedout() == 0
+        assert (await service.get(member, conversation.id)).status == "interrupted"
+
+    resumed_model = ScriptedPlanningModel(replies=[tool_reply(), final_reply()])
+    async with AsyncSqliteSaver.from_conn_string(str(path)) as saver:
+        service = ApprovalService(factory, planner(resumed_model), saver)
+        result = await service.start(member, conversation.id)
+        assert result.status == "pending" and result.plan.sources
+        assert {call.name for call in result.plan.tool_calls} == {
+            "search_documents",
+            "read_task_board",
+        }
+        assert resumed_model.bound_history[0] == ["search_documents", "read_task_board"]
+        assert await task_count(factory) == 1
 
 
 @pytest.fixture

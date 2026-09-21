@@ -132,6 +132,9 @@ def build_planning_agent(model):
         tools=PLANNING_TOOLS,
         system_prompt=PLAN_PROMPT,
         context_schema=PlanToolContext,
+        # 工具读取器只在本次请求内存在，不能恢复旧消息却丢失其来源/看板上下文。
+        # 外层 ApprovalGraph 持久保存校验后的完整方案；失败的生成节点从头读取。
+        checkpointer=False,
         response_format=ToolStrategy(PlanProposalVO, handle_errors=False),
         middleware=[
             ModelCallLimitMiddleware(run_limit=MAX_MODEL_CALLS, exit_behavior="error"),
@@ -245,6 +248,8 @@ class PlanAgentService:
             {"messages": [{"role": "user", "content": goal}]},
             context=context,
             config={"recursion_limit": PLAN_RECURSION_LIMIT},
+            # 内部 Agent 不落盘；避免继承外层 sync 并等待不存在的保存任务。
+            durability="async",
         )
         proposal = state.get("structured_response")
         if not isinstance(proposal, PlanProposalVO):

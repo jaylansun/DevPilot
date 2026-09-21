@@ -24,6 +24,7 @@ from app.schemas.plan_vo import (
 from app.services.document_service import require_document_project
 from app.services.planning_read_service import PlanningReadService
 from app.services.run_events import NOOP_EVENTS, EventPublisher, trace
+from app.services.run_limits import PLANNING_TIMEOUT_SECONDS
 from app.tools.planning_tools import PlanToolContext
 
 logger = logging.getLogger(__name__)
@@ -123,7 +124,7 @@ class PlanService:
                 503, "planning_busy", "当前正在生成其他方案，请稍后再试"
             ) from exc
         try:
-            async with asyncio.timeout(65):
+            async with asyncio.timeout(PLANNING_TIMEOUT_SECONDS):
                 # 工具上下文只在本次请求内存在，身份不交给模型填写。
                 reader = PlanningReadService(
                     self.session_factory,

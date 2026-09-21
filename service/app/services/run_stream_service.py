@@ -11,6 +11,10 @@ from pydantic import BaseModel
 
 from app.errors import ApiError
 from app.services.run_events import EventPublisher, RunEventChannel
+from app.services.run_limits import (
+    DEFAULT_STREAM_TIMEOUT_SECONDS,
+    PLANNING_STREAM_TIMEOUT_SECONDS,
+)
 
 logger = logging.getLogger(__name__)
 RunOperation = Callable[[EventPublisher], Awaitable[BaseModel]]
@@ -26,16 +30,24 @@ class StreamRunner:
         kind: RunKind,
         request_id: str,
         *,
-        timeout: float = 70,
+        timeout: float | None = None,
     ):
         self._run = run
         self._kind = kind
         self._channel = RunEventChannel(request_id)
-        self._timeout = timeout
+        self._timeout = (
+            timeout
+            if timeout is not None
+            else (
+                PLANNING_STREAM_TIMEOUT_SECONDS
+                if kind in ("planning", "approval")
+                else DEFAULT_STREAM_TIMEOUT_SECONDS
+            )
+        )
 
     async def _produce(self) -> None:
         try:
-            # 服务自身仍有 65 秒预算；额外保护包括等待名额和发送事件的时间。
+            # 规划/审批保留更长预算，外层仍限制等待名额、保存状态和发送事件的总时间。
             async with asyncio.timeout(self._timeout):
                 result = await self._run(self._channel)
                 await self._channel.emit("final", kind=self._kind, result=result)

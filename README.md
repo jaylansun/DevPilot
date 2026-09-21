@@ -62,6 +62,20 @@ Jenkins 配置、插件和任务保存在 Docker 命名卷 `jenkins_home` 中，
 
 Jenkins 的后端测试使用独立的假配置和禁网测试容器，不读取部署 `.env`，也不调用真实模型或连接项目数据库。测试用例使用临时数据库或模拟对象验证行为；部署阶段仍从 `devpilot-env-file` 凭据读取真实配置。因此，将部署模式改为 `AI_MODE=live` 不应改变测试条件。
 
+后端测试还会校验前后端共用的 `vue/src/types/stream.contract.json`。Jenkins 通过 Docker 命名构建上下文把该文件加入测试镜像；本地手动构建同一测试镜像时，在仓库根目录执行：
+
+```bash
+docker build --build-context stream_contract=vue/src/types \
+  --target test --tag devpilot-api-test:local service
+docker run --rm --network none \
+  -e AI_MODE=mock \
+  -e DATABASE_URL=postgresql+psycopg://test:test@127.0.0.1:1/devpilot_test \
+  -e JWT_SECRET=devpilot-test-key-not-for-production \
+  devpilot-api-test:local
+```
+
+共享契约只进入 `test` 阶段，日常 `docker compose build api` 构建的运行镜像不需要这个额外上下文。参见 [Docker 命名构建上下文说明](https://docs.docker.com/build/concepts/context/#named-contexts)。
+
 ## 本地不使用 Docker 的前端启动方式
 
 ```powershell

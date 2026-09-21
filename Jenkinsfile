@@ -78,6 +78,7 @@ pipeline {
                         set --
                     fi
                     docker build "$@" \
+                        --build-context stream_contract=vue/src/types \
                         --target test \
                         --tag "devpilot-api-test:${BUILD_NUMBER}" \
                         service

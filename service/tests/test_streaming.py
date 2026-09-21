@@ -19,15 +19,28 @@ from app.services.plan_agent_service import PlanAgentService
 from app.services.plan_service import PlanService
 from app.services.rag_model_service import RagModelService
 from app.services.rag_service import RagService, build_answer
-from app.services.run_stream_service import emit, is_streaming, stream_events, trace
+from app.services.run_events import NOOP_EVENTS, trace
+from app.services.run_stream_service import StreamRunner
+from app.tools.planning_tools import PlanToolContext
 from fastapi.testclient import TestClient
 from sqlalchemy import event as sql_event
+from test_plan_agent import ScriptedPlanningModel, final_reply, tool_reply
 from test_planning_tools import planning_context as _planning_context
 from test_rag_model import configuration
 from test_workflow import build_service
 from test_workflow import run as run_workflow
 
 planning_context = _planning_context
+
+
+class RecordingPublisher:
+    """无需 HTTP、队列或 ContextVar，就能测试业务报告的进度。"""
+
+    def __init__(self):
+        self.events = []
+
+    async def emit(self, event_type, **data):
+        self.events.append({"type": event_type, **data})
 
 
 def answer():
@@ -37,43 +50,44 @@ def answer():
 
 
 async def collect(run, kind="knowledge", request_id="stream-test"):
-    return [json.loads(line) async for line in stream_events(run, kind, request_id)]
+    return [
+        json.loads(line) async for line in StreamRunner(run, kind, request_id).stream()
+    ]
 
 
 async def test_first_progress_arrives_before_completion_and_disconnect_cancels():
     gate, cancelled = asyncio.Event(), asyncio.Event()
 
-    async def run():
+    async def run(events):
         try:
-            async with trace("answer_knowledge"):
+            async with trace(events, "answer_knowledge"):
                 await gate.wait()
             return answer()
         finally:
             cancelled.set()
 
-    iterator = stream_events(run, "knowledge", "cancel-test")
+    iterator = StreamRunner(run, "knowledge", "cancel-test").stream()
     first = json.loads(await asyncio.wait_for(anext(iterator), 1))
     assert first["status"] == "started" and not gate.is_set()
     await iterator.aclose()
     assert cancelled.is_set()
-    assert not is_streaming()
 
 
 async def test_backpressure_is_bounded_and_cancellation_unblocks_producer():
     count = 0
     stopped = asyncio.Event()
 
-    async def run():
+    async def run(events):
         nonlocal count
         try:
             for _ in range(1000):
-                await emit("token", text="字")
+                await events.emit("token", text="字")
                 count += 1
             return answer()
         finally:
             stopped.set()
 
-    iterator = stream_events(run, "knowledge", "slow-reader")
+    iterator = StreamRunner(run, "knowledge", "slow-reader").stream()
     await anext(iterator)
     await asyncio.sleep(0.02)
     assert count <= 33
@@ -89,8 +103,8 @@ async def test_backpressure_is_bounded_and_cancellation_unblocks_producer():
     ],
 )
 async def test_partial_failure_has_one_safe_terminal_error(failure, caplog):
-    async def run():
-        await emit("token", text="临时回答")
+    async def run(events):
+        await events.emit("token", text="临时回答")
         raise failure
 
     events = await collect(run)
@@ -100,14 +114,14 @@ async def test_partial_failure_has_one_safe_terminal_error(failure, caplog):
 
 
 async def test_parallel_requests_do_not_share_events_or_sequence():
-    async def run(text):
-        await emit("token", text=text)
+    async def run(events, text):
+        await events.emit("token", text=text)
         await asyncio.sleep(0)
         return answer()
 
     first, second = await asyncio.gather(
-        collect(lambda: run("甲"), request_id="a"),
-        collect(lambda: run("乙"), request_id="b"),
+        collect(lambda events: run(events, "甲"), request_id="a"),
+        collect(lambda events: run(events, "乙"), request_id="b"),
     )
     assert first[0]["text"] == "甲" and second[0]["text"] == "乙"
     for events, request_id in [(first, "a"), (second, "b")]:
@@ -116,14 +130,105 @@ async def test_parallel_requests_do_not_share_events_or_sequence():
 
 
 async def test_invalid_final_payload_does_not_leave_sequence_gap():
-    async def run():
-        await emit("token", text="临时内容")
+    async def run(events):
+        await events.emit("token", text="临时内容")
         return answer()
 
     events = await collect(run, kind="planning")
     assert [e["seq"] for e in events] == [1, 2]
     assert events[-1]["type"] == "error"
     assert events[-1]["error"]["code"] == "stream_unavailable"
+
+
+async def test_timeout_cancels_business_and_emits_one_terminal_error():
+    cancelled = asyncio.Event()
+
+    async def run(events):
+        try:
+            await events.emit("token", text="临时内容")
+            await asyncio.Event().wait()
+        finally:
+            cancelled.set()
+
+    runner = StreamRunner(run, "knowledge", "timeout-test", timeout=0.02)
+    events = [json.loads(line) async for line in runner.stream()]
+    assert cancelled.is_set()
+    assert [e["type"] for e in events] == ["token", "error"]
+    assert [e["seq"] for e in events] == [1, 2]
+    assert events[-1]["status"] == 504
+    assert events[-1]["error"]["code"] == "stream_timeout"
+
+
+@pytest.mark.parametrize("failed", [False, True])
+async def test_trace_uses_injected_publisher_without_streaming(failed):
+    publisher = RecordingPublisher()
+    failure = RuntimeError("不应放进事件的正文")
+    try:
+        async with trace(publisher, "read_task_board", kind="tool"):
+            if failed:
+                raise failure
+    except RuntimeError as exc:
+        assert exc is failure
+    assert [e["status"] for e in publisher.events] == [
+        "started",
+        "failed" if failed else "completed",
+    ]
+    assert publisher.events[0]["id"] == publisher.events[1]["id"]
+    assert all(e["type"] == "tool" for e in publisher.events)
+    assert "不应放进事件的正文" not in json.dumps(publisher.events, ensure_ascii=False)
+    # 普通接口的空实现不需要队列或消费任务。
+    async with trace(NOOP_EVENTS, "read_task_board"):
+        pass
+
+
+async def test_real_planning_agent_tools_report_to_injected_publisher(planning_context):
+    from app.services.plan_agent_service import build_planning_agent
+    from app.services.planning_read_service import PlanningReadService
+
+    factory, owner, project, _, _, index, _ = planning_context
+    publisher = RecordingPublisher()
+    context = PlanToolContext(
+        owner, project, PlanningReadService(factory, index), events=publisher
+    )
+    model = ScriptedPlanningModel(replies=[tool_reply(), final_reply()])
+    result = await build_planning_agent(model).ainvoke(
+        {"messages": [{"role": "user", "content": "规划订单任务"}]},
+        context=context,
+    )
+    assert result["structured_response"].tasks
+    for name in ("search_documents", "read_task_board"):
+        events = [e for e in publisher.events if e["name"] == name]
+        assert [e["status"] for e in events] == ["started", "completed"]
+        assert all(e["type"] == "tool" for e in events)
+
+
+async def test_graph_passes_publisher_and_streaming_mode_to_knowledge_model(
+    planning_context,
+):
+    service = build_service(planning_context)
+
+    async def model_answer(question, sources, *, events, streaming):
+        assert streaming and sources
+        await events.emit("token", text="不能重复下单。[1]")
+        return GroundedAnswerVO(
+            answer="不能重复下单。[1]", source_ids=[1], insufficient_evidence=False
+        )
+
+    service.workflow.rag_model = AsyncMock()
+    service.workflow.rag_model.answer.side_effect = model_answer
+    events = await collect(
+        lambda publisher: run_workflow(
+            planning_context,
+            service,
+            intent="knowledge_question",
+            events=publisher,
+            streaming=True,
+        ),
+        "workflow",
+    )
+    assert [e["text"] for e in events if e["type"] == "token"] == ["不能重复下单。[1]"]
+    assert events[-1]["type"] == "final"
+    assert events[-1]["result"]["sources"][0]["source_id"] == 1
 
 
 @pytest.mark.parametrize(
@@ -226,7 +331,10 @@ async def test_stream_api_auth_contract_and_actual_readonly_services(
 
 async def test_real_graph_stream_respects_parallel_join(planning_context):
     service = build_service(planning_context)
-    events = await collect(lambda: run_workflow(planning_context, service), "workflow")
+    events = await collect(
+        lambda events: run_workflow(planning_context, service, events=events),
+        "workflow",
+    )
     nodes = [(e.get("name"), e.get("status")) for e in events]
     report_index = nodes.index(("generate_report", "started"))
     assert nodes.index(("retrieve_documents", "completed")) < report_index
@@ -308,11 +416,13 @@ async def test_model_uses_actual_provider_chunks_before_final_validation(monkeyp
             )
         )
 
-        async def run():
-            result = await model.answer("可以重复下单吗？", [source])
+        async def run(events):
+            result = await model.answer(
+                "可以重复下单吗？", [source], events=events, streaming=True
+            )
             return build_answer(result, [source], "live")
 
-        iterator = stream_events(run, "knowledge", "provider-stream")
+        iterator = StreamRunner(run, "knowledge", "provider-stream").stream()
         first = json.loads(await asyncio.wait_for(anext(iterator), 3))
         assert first["type"] == "token" and first["text"] == "不能"
         gate.set()
@@ -338,6 +448,7 @@ def test_shared_frontend_event_contract():
         "tool",
         "error",
         "final",
+        "approval_required",
     }
 
 
@@ -346,8 +457,9 @@ async def test_invalid_citation_after_tokens_emits_error_and_releases_slot(
 ):
     factory, owner, project, _, _, index, _ = planning_context
 
-    async def bad_answer(*_):
-        await emit("token", text="未校验内容。[999]")
+    async def bad_answer(*_, events, streaming):
+        assert streaming
+        await events.emit("token", text="未校验内容。[999]")
         return GroundedAnswerVO(
             answer="未校验内容。[999]", source_ids=[999], insufficient_evidence=False
         )
@@ -356,7 +468,11 @@ async def test_invalid_citation_after_tokens_emits_error_and_releases_slot(
     model.answer.side_effect = bad_answer
     rag = RagService(configuration(), index, model)
     async with factory() as session:
-        events = await collect(lambda: rag.answer(session, owner, project, "规则？"))
+        events = await collect(
+            lambda events: rag.answer(
+                session, owner, project, "规则？", events=events, streaming=True
+            )
+        )
     assert any(e["type"] == "token" for e in events)
     assert events[-1]["type"] == "error"
     assert events[-1]["error"]["code"] == "invalid_model_citations"
@@ -370,9 +486,10 @@ async def test_asgi_disconnect_cancels_model_and_releases_service_slot(
     factory, owner, project, _, _, index, _ = planning_context
     cancelled, disconnected = asyncio.Event(), asyncio.Event()
 
-    async def wait_model(*_):
+    async def wait_model(*_, events, streaming):
+        assert streaming
         try:
-            await emit("token", text="正在生成")
+            await events.emit("token", text="正在生成")
             await asyncio.Event().wait()
         finally:
             cancelled.set()

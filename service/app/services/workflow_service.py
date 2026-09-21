@@ -15,6 +15,7 @@ from app.schemas.workflow_qo import WorkflowRequestQO
 from app.schemas.workflow_vo import WorkflowInfoVO, WorkflowResultVO
 from app.services.document_service import require_document_project
 from app.services.planning_read_service import PlanningReadService
+from app.services.run_events import NOOP_EVENTS, EventPublisher
 from app.services.workflow_graph import WorkflowContext, WorkflowGraph
 
 logger = logging.getLogger(__name__)
@@ -59,6 +60,9 @@ class WorkflowService:
         owner_id: UUID,
         project_id: UUID,
         body: WorkflowRequestQO,
+        *,
+        events: EventPublisher = NOOP_EVENTS,
+        streaming: bool = False,
     ) -> WorkflowResultVO:
         await require_document_project(session, owner_id, project_id)
         if not self.configured:
@@ -83,7 +87,12 @@ class WorkflowService:
                 # 身份与读取器在服务端构造，模型和请求体都不能设置；不共享 AsyncSession。
                 await documents.assert_unchanged(owner_id, project_id)
                 context = WorkflowContext(
-                    owner_id, project_id, documents, documents.fork()
+                    owner_id,
+                    project_id,
+                    documents,
+                    documents.fork(),
+                    events=events,
+                    streaming=streaming,
                 )
                 state = await self.workflow.graph.ainvoke(
                     {"message": body.message, "requested_intent": body.intent},

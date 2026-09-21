@@ -2,12 +2,11 @@ from datetime import UTC, datetime
 from unittest.mock import ANY, AsyncMock
 from uuid import UUID, uuid4
 
-from fastapi.testclient import TestClient
-
 from app.api.v1 import task_controller as tasks_api
 from app.models.task_do import TaskDO, TaskSource, TaskStatus
 from app.models.user_do import UserDO
 from app.services.task_service import TaskNotFoundError, TaskVersionConflictError
+from fastapi.testclient import TestClient
 
 
 def make_task(project_id: UUID) -> TaskDO:
@@ -21,6 +20,7 @@ def make_task(project_id: UUID) -> TaskDO:
         status=TaskStatus.TODO,
         acceptance_criteria="接口测试通过",
         source=TaskSource.MANUAL,
+        dependency_ids=[],
         version=1,
         created_at=timestamp,
         updated_at=timestamp,

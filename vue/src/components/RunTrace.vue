@@ -8,7 +8,7 @@ const labels: Record<StepName, string> = {
   classify_intent: "识别本次用途", load_lookup_board: "读取任务看板", answer_lookup: "整理匹配任务",
   retrieve_documents: "检索需求文档", load_task_board: "读取任务看板", generate_report: "对照需求与任务",
   clarify: "整理用途说明", draft_proposal: "生成任务草案", search_documents: "检索项目文档",
-  read_task_board: "读取任务看板",
+  read_task_board: "读取任务看板", submit_approval: "保存并提交审批", apply_approval: "执行审批决定",
 };
 const steps = computed(() => {
   const entries = new Map<string, TraceEvent>();

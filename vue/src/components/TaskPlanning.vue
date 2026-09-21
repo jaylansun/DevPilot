@@ -14,6 +14,7 @@ import { getPlanningInfo, proposeTasks } from "@/api/planning_api";
 import { ApiError, errorMessage } from "@/api/http_client";
 import type { PlanInfoVO, PlanResultVO, ToolCallVO } from "@/types/api";
 
+import PlanningApprovals from "@/components/PlanningApprovals.vue";
 import RunTrace from "@/components/RunTrace.vue";
 import type { TraceEvent } from "@/types/stream";
 
@@ -27,12 +28,13 @@ const loadRequestId = ref("");
 const goal = ref("");
 const goalInput = ref<HTMLTextAreaElement | null>(null);
 const sending = ref(false);
+const approvalSending = ref(false);
 const formError = ref("");
 const formRequestId = ref("");
 const result = ref<PlanResultVO | null>(null);
 const submittedGoal = ref("");
 const canGenerate = computed(
-  () => !loading.value && info.value?.configured && !!info.value.ready_documents,
+  () => !approvalSending.value && !loading.value && info.value?.configured && !!info.value.ready_documents,
 );
 let active = true;
 let infoController: AbortController | undefined;
@@ -108,7 +110,7 @@ async function generate() {
       { goal: text },
       controller.signal,
       (event) => {
-        if (active && !controller.signal.aborted && requestController === controller && event.type !== "token")
+        if (active && !controller.signal.aborted && requestController === controller && (event.type === "node" || event.type === "tool"))
           trace.value.push(event);
       },
     );
@@ -266,7 +268,7 @@ onBeforeUnmount(() => {
             <el-button v-if="result" text class="ui-interactive min-h-11!" @click="clearDraft">清空草案</el-button>
           </div>
           <p id="planning-help" class="mt-3 mb-0 text-xs leading-6 text-muted">
-            仅生成临时草案，暂不支持保存、提交审批或加入看板。清空、重新生成、刷新或离开后移除。
+            此处生成临时预览，刷新或离开后移除。如需保存并交给审批人，请使用下方“生成并提交审批”，按当前目标重新生成并保存方案。
           </p>
           <p v-if="info" class="mt-2 mb-0 text-xs leading-6 text-muted">
             <template v-if="info.mode === 'mock'">演示模式返回示例草案，不调用真实大模型。请结合项目实际核对内容。</template>
@@ -404,5 +406,6 @@ onBeforeUnmount(() => {
         </dl>
       </div>
     </div>
+    <PlanningApprovals :project-id="projectId" :goal="goal" :disabled="loading || sending || !info?.configured || !info?.ready_documents" @busy="approvalSending = $event" />
   </section>
 </template>

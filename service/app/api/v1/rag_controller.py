@@ -60,7 +60,14 @@ async def stream_question(
 ):
     await require_document_project(session, current_user.id, project_id)
     return stream_response(
-        lambda: rag.answer(session, current_user.id, project_id, body.question),
+        lambda events: rag.answer(
+            session,
+            current_user.id,
+            project_id,
+            body.question,
+            events=events,
+            streaming=True,
+        ),
         "knowledge",
         request.state.request_id,
     )

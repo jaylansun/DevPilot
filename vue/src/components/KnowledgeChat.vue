@@ -185,7 +185,7 @@ async function send(retryTurn?: Turn) {
       const item = turns.value.find((value) => value.id === turn.id);
       if (!item) return;
       if (event.type === "token") item.draft = (item.draft ?? "") + event.text;
-      else item.trace.push(event);
+      else if (event.type === "node" || event.type === "tool") item.trace.push(event);
       void followLatestIfNeeded();
     });
     // 取消后即使底层请求仍然返回，也不能覆盖当前记录或后续提问。

@@ -4,6 +4,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
+from app.schemas.approval_vo import ApprovalVO
 from app.schemas.error_vo import ErrorDetailVO
 from app.schemas.plan_vo import PlanResultVO
 from app.schemas.rag_vo import RagAnswerVO
@@ -23,6 +24,8 @@ StepName = Literal[
     "draft_proposal",
     "search_documents",
     "read_task_board",
+    "submit_approval",
+    "apply_approval",
 ]
 
 
@@ -67,8 +70,19 @@ class WorkflowFinal(EventBase):
     result: WorkflowResultVO
 
 
+class ApprovalRequiredEvent(EventBase):
+    type: Literal["approval_required"] = "approval_required"
+    approval: ApprovalVO
+
+
+class ApprovalFinal(EventBase):
+    type: Literal["final"] = "final"
+    kind: Literal["approval"] = "approval"
+    result: ApprovalVO
+
+
 FinalEvent = Annotated[
-    KnowledgeFinal | PlanningFinal | WorkflowFinal, Field(discriminator="kind")
+    KnowledgeFinal | PlanningFinal | WorkflowFinal | ApprovalFinal, Field(discriminator="kind")
 ]
 
 
@@ -79,7 +93,7 @@ class ErrorEvent(EventBase):
 
 
 StreamEvent = Annotated[
-    TokenEvent | NodeEvent | ToolEvent | FinalEvent | ErrorEvent,
+    TokenEvent | NodeEvent | ToolEvent | ApprovalRequiredEvent | FinalEvent | ErrorEvent,
     Field(discriminator="type"),
 ]
 stream_event_adapter = TypeAdapter(StreamEvent)

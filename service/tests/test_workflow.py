@@ -4,15 +4,6 @@ from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
 import pytest
-from httpx import ASGITransport, AsyncClient
-from fastapi.testclient import TestClient
-from langchain_core.messages import AIMessage
-from pydantic import ValidationError
-from sqlalchemy import event
-from test_plan_agent import ScriptedPlanningModel
-from test_plan_service import settings
-from test_planning_tools import planning_context as _planning_context
-
 from app.api.v1.workflow_controller import get_workflow_service
 from app.database import get_db_session
 from app.errors import ApiError
@@ -25,8 +16,17 @@ from app.schemas.workflow_qo import WorkflowRequestQO
 from app.schemas.workflow_vo import GapReportVO, TaskLookupVO
 from app.services.planning_read_service import PlanningReadService
 from app.services.rag_model_service import RagModelService
+from app.services.run_events import NOOP_EVENTS
 from app.services.workflow_model_service import WorkflowModelService
 from app.services.workflow_service import WorkflowService
+from fastapi.testclient import TestClient
+from httpx import ASGITransport, AsyncClient
+from langchain_core.messages import AIMessage
+from pydantic import ValidationError
+from sqlalchemy import event
+from test_plan_agent import ScriptedPlanningModel
+from test_plan_service import settings
+from test_planning_tools import planning_context as _planning_context
 
 planning_context = _planning_context
 
@@ -84,7 +84,16 @@ def build_service(context, *, live=False, model=None):
     )
 
 
-async def run(context, service, message="对照需求检查遗漏", intent="auto", owner=None):
+async def run(
+    context,
+    service,
+    message="对照需求检查遗漏",
+    intent="auto",
+    owner=None,
+    *,
+    events=NOOP_EVENTS,
+    streaming=False,
+):
     factory, user, project, *_ = context
     async with factory() as session:
         return await service.run(
@@ -92,6 +101,8 @@ async def run(context, service, message="对照需求检查遗漏", intent="auto
             owner or user,
             project,
             WorkflowRequestQO(message=message, intent=intent),
+            events=events,
+            streaming=streaming,
         )
 
 

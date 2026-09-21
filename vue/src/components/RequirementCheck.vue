@@ -114,7 +114,7 @@ async function run() {
       (event) => {
         if (!active || runController !== controller || controller.signal.aborted) return;
         if (event.type === "token") draft.value += event.text;
-        else trace.value.push(event);
+        else if (event.type === "node" || event.type === "tool") trace.value.push(event);
       },
     );
     if (active && runController === controller && !controller.signal.aborted)

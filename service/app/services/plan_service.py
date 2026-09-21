@@ -23,7 +23,7 @@ from app.schemas.plan_vo import (
 )
 from app.services.document_service import require_document_project
 from app.services.planning_read_service import PlanningReadService
-from app.services.run_stream_service import trace
+from app.services.run_events import NOOP_EVENTS, EventPublisher, trace
 from app.tools.planning_tools import PlanToolContext
 
 logger = logging.getLogger(__name__)
@@ -95,7 +95,13 @@ class PlanService:
         )
 
     async def create(
-        self, session: AsyncSession, owner_id: UUID, project_id: UUID, goal: str
+        self,
+        session: AsyncSession,
+        owner_id: UUID,
+        project_id: UUID,
+        goal: str,
+        *,
+        events: EventPublisher = NOOP_EVENTS,
     ) -> PlanResultVO:
         await require_document_project(session, owner_id, project_id)
         if not await list_ready_documents(session, project_id):
@@ -124,10 +130,10 @@ class PlanService:
                     self.index_service,
                     self.settings.rag_min_score,
                 )
-                context = PlanToolContext(owner_id, project_id, reader)
-                async with trace("draft_proposal"):
+                context = PlanToolContext(owner_id, project_id, reader, events=events)
+                async with trace(events, "draft_proposal"):
                     proposal = await self.agent_service.generate(goal, context)
-                async with trace("validate_result"):
+                async with trace(events, "validate_result"):
                     proposal = PlanProposalVO.model_validate(proposal.model_dump())
                     validate_proposal_sources(proposal, reader)
                     await reader.assert_unchanged(owner_id, project_id)

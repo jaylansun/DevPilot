@@ -3,8 +3,6 @@ from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
 import pytest
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-
 from app.config import Settings
 from app.database import Base
 from app.errors import ApiError
@@ -14,6 +12,7 @@ from app.models.user_do import UserDO, UserRole
 from app.schemas.rag_vo import GroundedAnswerVO, RagSourceVO
 from app.services.document_index_service import RetrievedChunk
 from app.services.rag_service import RagService, build_answer
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
 
 def settings(**kwargs):
@@ -201,7 +200,7 @@ async def test_deleted_document_during_answer_is_not_returned(rag_context):
     factory, owner, project, doc, index, model = rag_context
     async with factory.begin() as session:
 
-        async def answer(*_):
+        async def answer(*_, **_options):
             (await session.get(DocumentDO, doc)).status = DocumentStatus.DELETING
             await session.flush()
             return GroundedAnswerVO(
@@ -234,7 +233,7 @@ async def test_cancelled_answer_releases_slot(rag_context):
     factory, owner, project, _doc, index, model = rag_context
     started = asyncio.Event()
 
-    async def wait_forever(*_):
+    async def wait_forever(*_, **_options):
         started.set()
         await asyncio.Event().wait()
 

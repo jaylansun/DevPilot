@@ -60,7 +60,14 @@ async def stream_workflow(
 ):
     await require_document_project(session, current_user.id, project_id)
     return stream_response(
-        lambda: workflow.run(session, current_user.id, project_id, body),
+        lambda events: workflow.run(
+            session,
+            current_user.id,
+            project_id,
+            body,
+            events=events,
+            streaming=True,
+        ),
         "workflow",
         request.state.request_id,
     )

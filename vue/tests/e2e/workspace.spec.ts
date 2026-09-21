@@ -45,6 +45,8 @@ async function mockApi(page: Page, role: UserVO["role"] = "member") {
         401,
       );
     if (path === "/me") return json(user);
+    if (path === "/approvals" && role === "reviewer")
+      return json({ items: [], total: 0, offset: 0, limit: 20 });
     state.projectRequests++;
     if (role !== "member")
       return json(
@@ -199,7 +201,7 @@ test("审批人无法进入成员项目列表", async ({ page }) => {
   await page.goto("/projects");
   await expect(page).toHaveURL(/\/reviewer$/);
   await expect(
-    page.getByRole("heading", { name: "审批中心即将开放" }),
+    page.getByRole("heading", { name: "审批工作区" }),
   ).toBeVisible();
   expect(state.projectRequests).toBe(0);
 });

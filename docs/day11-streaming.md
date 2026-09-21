@@ -1,5 +1,7 @@
 # 第 11 天：NDJSON 流、执行轨迹与增量显示
 
+> 本文记录第 11 天的交付范围。第 12 天已新增持久会话、审批事件、Checkpoint 和任务写入，见 [持久规划与审批说明](day12-approvals.md)。以下“尚未接入审批”等描述均指第 11 天当时的状态。
+
 ## 页面变化
 
 - **AI 问答**：真实模型回答逐步出现。完成引用校验后，完整回答替换临时预览，并显示原文来源。
@@ -53,7 +55,10 @@ JWT、角色、项目归属与输入校验在响应开始前完成，失败仍�
 Vue fetch → ReadableStream → UTF-8 解码 → 按行解析 → 增量更新页面
 ```
 
-- `run_stream_service.py` 为每次请求建立独立 ContextVar 事件通道和容量 32 的队列。并行节点共用本次通道，不同请求相互隔离。队列满时等待消费者，避免无限缓存。生成器关闭后取消并等待生产任务退出。
+- `run_events.py` 中的 `RunEventChannel` 为每次请求保存独立的请求编号、容量 32 的队列和消费序号。`emit()` 校验后入队，`receive()` 出队并编号；队列满时等待消费者，避免无限缓存。业务仅依赖 `EventPublisher` 发送接口，不依赖 HTTP 或队列消费。
+- `run_stream_service.py` 中的 `StreamRunner` 启动生产任务，把当前通道作为参数交给业务回调；同时消费队列并生成 NDJSON。它统一处理超时、final/error 和断连清理。生成器关闭后取消并等待生产任务退出。
+- 发送器通过 `events=` 显式传入普通 Service，通过 `WorkflowContext.events`、`PlanToolContext.events` 传入 Graph 节点与工具。并行节点共用本次通道，不同请求相互隔离；不再使用 `_sink`、`ContextVar` 或嵌套 `send()` 查找发送器。发送器不存到共享 Service 实例上，也不放入模型输入或 Graph State。
+- 普通 JSON 请求默认使用无状态的 `NullEventPublisher`，忽略过程事件；模型是否逐步输出由明确的 `streaming` 参数控制。仅提供事件发送器不会自动切换模型调用方式。测试可注入只记录事件的对象，无需建立 HTTP 流。
 - `workflow_graph.py` 包装实际节点的进入、正常返回和异常位置。原有 State、路由、并行汇合与校验保留；`ainvoke` 的最终结果通过 final 返回。规划工具也在真正读取前后发送事件。
 - 轨迹只发送代码定义的名称和状态，不发送问题、工具参数/返回值、第三方异常正文、密钥或模型思考。原文引用仍由原有业务结果返回。
 - `RagModelService` 流式分支调用 LangChain `astream`，以字典 schema 解析模型逐步产生的结构化字段，发送累计 answer 相对上一份的新增文字。结束后用 Pydantic 完整校验，再验证引用和资料是否变化。没有先等待完整答案再分割文字。
@@ -63,12 +68,39 @@ Vue fetch → ReadableStream → UTF-8 解码 → 按行解析 → 增量更新�
 - 沿用 JWT、401 处理和前端 75 秒超时。业务服务总预算仍为 65 秒，流通道有 70 秒保护。Nginx 关闭代理缓冲，服务端设置 `X-Accel-Buffering: no` 与禁止缓存/转换的响应头。
 - 停止等待、切换标签或离开页面会断开请求；服务器收到断连后取消模型/Graph 协程并释放处理名额。同步向量线程或供应商已开始的计算不保证立即停止，不承诺退还已经产生的费用。
 
+### 事件通道怎样传入业务
+
+以知识问答接口为例，Controller 明确传递 `events` 和流式模式：
+
+```python
+return stream_response(
+    lambda events: rag.answer(
+        session, current_user.id, project_id, body.question,
+        events=events, streaming=True,
+    ),
+    "knowledge",
+    request.state.request_id,
+)
+```
+
+`StreamRunner._produce()` 调用 `await self._run(self._channel)`，因此回调的 `events` 就是该请求的通道。Service 再把它传给模型服务或运行上下文。业务使用 `await events.emit(...)`，阶段追踪使用 `async with trace(events, "answer_knowledge")`。
+
+```text
+StreamRunner 创建本次 RunEventChannel
+  → 回调参数 events
+  → Service 的 events 参数 / 运行上下文的 events 字段
+  → events.emit(...) 入队
+  → StreamRunner.stream() 调用 receive() 出队
+  → 一行 JSON + 换行 → 浏览器
+```
+
 ## 关键文件
 
 | 文件 | 职责 |
 | --- | --- |
 | `service/app/schemas/stream_vo.py` | NDJSON 事件类型与校验 |
-| `service/app/services/run_stream_service.py` | 事件通道、背压、取消、错误与终止 |
+| `service/app/services/run_events.py` | 发送接口、空实现、请求队列、背压、序号与 trace |
+| `service/app/services/run_stream_service.py` | StreamRunner 任务生命周期、取消、错误、终止与 HTTP 响应 |
 | `service/app/services/rag_model_service.py` | 真实回答文字增量 |
 | `service/app/services/workflow_graph.py`、`service/app/tools/planning_tools.py` | 实际节点与工具轨迹 |
 | `vue/src/api/stream_client.ts` | 逐行解析与事件处理 |
@@ -83,6 +115,8 @@ Vue fetch → ReadableStream → UTF-8 解码 → 按行解析 → 增量更新�
 自动化测试使用独立 SQLite、假索引、离线模型及 SSE 替身；浏览器使用隔离数据与本地分块 HTTP 服务，不操作真实业务数据。
 
 2026-09-20 最终验证：**256 项后端测试、65 项前端单元测试、55 项生产包浏览器测试全部通过**；生产构建、TypeScript 类型检查、新增/修改 Python 的 Ruff 检查及 `git diff --check` 通过。后端有一条已有的 Starlette/AnyIO 弃用提示，不影响测试结果。已查看桌面与手机流式页面截图。
+
+2026-09-21 事件通道重构验证：**261 项后端测试、65 项前端单元测试全部通过**。覆盖显式发送器注入、真实 Agent 工具和 Graph 节点进度、流式/非流式模型调用区分、并发事件隔离、队列背压、超时、ASGI 断连取消和引用校验失败。Python 静态检查及 `git diff --check` 通过；未修改前端协议与页面，本次未重跑浏览器测试或调用在线模型。
 
 2026-09-20 另用已配置的 MiMo v2.5 进行独立进程验收：输入合成订单规则，约 **5.73 秒**收到首段文字，**6.95 秒**完成，共 **8 个 token 事件**，最终引用校验通过。这是单次测量，不是延迟保证。没有替换运行中服务、修改环境变量或输出密钥。
 

@@ -58,7 +58,9 @@ async def stream_proposal(
 ):
     await require_document_project(session, current_user.id, project_id)
     return stream_response(
-        lambda: planner.create(session, current_user.id, project_id, body.goal),
+        lambda events: planner.create(
+            session, current_user.id, project_id, body.goal, events=events
+        ),
         "planning",
         request.state.request_id,
     )

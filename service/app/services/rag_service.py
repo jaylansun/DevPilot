@@ -11,7 +11,7 @@ from app.errors import ApiError
 from app.repositories.rag_repository import list_ready_documents
 from app.schemas.rag_vo import GroundedAnswerVO, RagAnswerVO, RagInfoVO, RagSourceVO
 from app.services.document_service import require_document_project
-from app.services.run_stream_service import trace
+from app.services.run_events import NOOP_EVENTS, EventPublisher, trace
 
 logger = logging.getLogger(__name__)
 UNKNOWN_ANSWER = (
@@ -71,7 +71,14 @@ class RagService:
         )
 
     async def answer(
-        self, session: AsyncSession, owner_id: UUID, project_id: UUID, question: str
+        self,
+        session: AsyncSession,
+        owner_id: UUID,
+        project_id: UUID,
+        question: str,
+        *,
+        events: EventPublisher = NOOP_EVENTS,
+        streaming: bool = False,
     ) -> RagAnswerVO:
         # 越权请求必须在任何检索或模型调用之前被拒绝。
         await require_document_project(session, owner_id, project_id)
@@ -95,7 +102,7 @@ class RagService:
             raise ApiError(503, "rag_busy", "当前正在处理其他问题，请稍后再试") from exc
         try:
             async with asyncio.timeout(65):
-                async with trace("retrieve_knowledge"):
+                async with trace(events, "retrieve_knowledge"):
                     chunks = await asyncio.to_thread(
                         self.index_service.search,
                         project_id,
@@ -126,9 +133,11 @@ class RagService:
                         status="insufficient_evidence",
                         mode=self.settings.ai_mode,
                     )
-                async with trace("answer_knowledge"):
-                    result = await self.model_service.answer(question, sources)
-                async with trace("validate_result"):
+                async with trace(events, "answer_knowledge"):
+                    result = await self.model_service.answer(
+                        question, sources, events=events, streaming=streaming
+                    )
+                async with trace(events, "validate_result"):
                     answer = build_answer(result, sources, self.settings.ai_mode)
                     # 模型调用期间已删除的资料不能再作为当前有效引用返回。
                     await require_document_project(session, owner_id, project_id)

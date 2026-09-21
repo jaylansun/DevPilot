@@ -18,7 +18,7 @@ from langchain_openai import ChatOpenAI
 from app.config import Settings
 from app.errors import ApiError
 from app.schemas.plan_vo import PlanProposalVO, TaskDraftVO, normalize_task_title
-from app.services.run_stream_service import trace
+from app.services.run_events import trace
 from app.tools.planning_tools import PLANNING_TOOLS, PlanToolContext
 
 MAX_DOCUMENT_SEARCHES = 3
@@ -224,11 +224,11 @@ class PlanAgentService:
 
     async def generate(self, goal: str, context: PlanToolContext) -> PlanProposalVO:
         if self.settings.ai_mode == "mock":
-            async with trace("search_documents", kind="tool"):
+            async with trace(context.events, "search_documents", kind="tool"):
                 await context.reader.search_documents(
                     context.owner_id, context.project_id, goal
                 )
-            async with trace("read_task_board", kind="tool"):
+            async with trace(context.events, "read_task_board", kind="tool"):
                 await context.reader.read_task_board(
                     context.owner_id, context.project_id
                 )

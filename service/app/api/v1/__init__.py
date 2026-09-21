@@ -1,5 +1,6 @@
 from fastapi import APIRouter
 
+from app.api.v1.approval_controller import router as approval_router
 from app.api.v1.auth_controller import router as auth_router
 from app.api.v1.document_controller import router as documents_router
 from app.api.v1.plan_controller import router as plan_router
@@ -9,6 +10,7 @@ from app.api.v1.task_controller import router as tasks_router
 from app.api.v1.workflow_controller import router as workflow_router
 
 router = APIRouter()
+router.include_router(approval_router)
 router.include_router(auth_router)
 router.include_router(projects_router)
 router.include_router(tasks_router)

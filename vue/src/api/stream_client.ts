@@ -5,12 +5,23 @@ const invalid = () => new ApiError("流式数据不完整或格式不正确，�
 const object = (value: unknown): value is Record<string, unknown> =>
   !!value && typeof value === "object" && !Array.isArray(value);
 
+function validApproval(value: unknown): boolean {
+  return object(value) && typeof value.id === "string" && typeof value.conversation_id === "string" &&
+    typeof value.project_id === "string" && typeof value.goal === "string" &&
+    ["pending", "processing", "approved", "rejected"].includes(value.status as string) &&
+    object(value.plan) && object(value.plan.proposal) && Array.isArray(value.plan.proposal.tasks) &&
+    Array.isArray(value.plan.sources) && Array.isArray(value.created_tasks);
+}
+
 export function parseStreamEvent(line: string): StreamEvent {
   let event: unknown;
   try { event = JSON.parse(line); } catch { throw invalid(); }
   if (!object(event) || event.version !== 1 || !Number.isSafeInteger(event.seq) ||
       (event.seq as number) < 1 || typeof event.request_id !== "string") throw invalid();
   switch (event.type) {
+    case "approval_required":
+      if (!validApproval(event.approval) || (event.approval as Record<string, unknown>).status !== "pending") throw invalid();
+      break;
     case "node": case "tool":
       if (typeof event.id !== "string" || !stepNames.includes(event.name as never) ||
           !["started", "completed", "failed"].includes(event.status as string)) throw invalid();
@@ -25,6 +36,10 @@ export function parseStreamEvent(line: string): StreamEvent {
       break;
     case "final": {
       const result = event.result;
+      if (event.kind === "approval") {
+        if (!validApproval(result)) throw invalid();
+        break;
+      }
       if (!object(result) || !["mock", "live"].includes(result.mode as string) || !Array.isArray(result.sources)) throw invalid();
       if (event.kind === "knowledge") {
         if (typeof result.answer !== "string" || !["answered", "insufficient_evidence"].includes(result.status as string)) throw invalid();

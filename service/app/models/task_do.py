@@ -3,6 +3,7 @@ from enum import StrEnum
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
+    JSON,
     CheckConstraint,
     DateTime,
     Enum,
@@ -41,6 +42,7 @@ class TaskDO(Base):
             name="ck_tasks_priority",
         ),
         UniqueConstraint("project_id", "title", name="uq_tasks_project_title"),
+        UniqueConstraint("approval_id", "draft_id", name="uq_tasks_approval_draft"),
     )
 
     id: Mapped[UUID] = mapped_column(
@@ -55,6 +57,11 @@ class TaskDO(Base):
         nullable=False,
     )
     title: Mapped[str] = mapped_column(String(200), nullable=False)
+    approval_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("approvals.id", ondelete="SET NULL"), nullable=True
+    )
+    draft_id: Mapped[str | None] = mapped_column(String(3), nullable=True)
+    dependency_ids: Mapped[list] = mapped_column(JSON, default=list, server_default="[]")
     description: Mapped[str] = mapped_column(
         Text,
         default="",

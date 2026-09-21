@@ -40,6 +40,8 @@ async function planning(
   await page.route("**/api/v1/**", async (route) => {
     const req = route.request();
     const path = new URL(req.url()).pathname;
+    if (req.method() === "GET" && path.endsWith("/conversations"))
+      return route.fulfill({ json: [] });
     if (req.method() === "GET" && path.endsWith("/me"))
       return route.fulfill({
         json: { id: randomUUID(), username: "规划测试", role: "member" },
@@ -212,7 +214,7 @@ test("任务规划入口展示只读草案、验收依赖和安全引用，双�
   await expect(toolCalls).toContainText("检索项目文档 · 已完成 · 1 项");
   await expect(toolCalls).toContainText("读取任务看板 · 已完成 · 3 项");
   await expect(
-    page.getByText("仅生成临时草案，暂不支持保存、提交审批或加入看板"),
+    page.getByText("此处生成临时预览，刷新或离开后移除。", { exact: false }),
   ).toBeVisible();
   await expect(
     preview.getByRole("button", { name: /提交审批|保存|加入看板/ }),

@@ -3,12 +3,11 @@ from uuid import uuid4
 
 import httpx
 import pytest
-from langchain_core.messages import HumanMessage, SystemMessage
-from langchain_core.runnables import RunnableLambda
-
 from app.config import Settings
 from app.schemas.rag_vo import GroundedAnswerVO, RagSourceVO
 from app.services.rag_model_service import RagModelService
+from langchain_core.messages import HumanMessage, SystemMessage
+from langchain_core.runnables import RunnableLambda
 
 
 def configuration(**kwargs):
@@ -134,6 +133,7 @@ async def test_openai_compatible_wire_contract_without_external_requests(monkeyp
 
     def respond(request):
         body = json.loads(request.content)
+        assert not body.get("stream", False)
         assert body["model"] == "synthetic-model"
         assert body["tools"][0]["function"]["name"] == "GroundedAnswerVO"
         assert request.headers["authorization"] == "Bearer synthetic-test-key"
@@ -197,6 +197,12 @@ async def test_openai_compatible_wire_contract_without_external_requests(monkeyp
             heading="订单",
             text="不能重复下单。",
         )
-        result = await RagModelService(config).answer("能重复下单吗？", [source])
+        class UnexpectedTokens:
+            async def emit(self, event_type, **data):
+                pytest.fail("显式提供发送器不应自动启用模型流式调用")
+
+        result = await RagModelService(config).answer(
+            "能重复下单吗？", [source], events=UnexpectedTokens()
+        )
     assert isinstance(result, GroundedAnswerVO)
     assert result.answer == "不能重复下单。[1]"

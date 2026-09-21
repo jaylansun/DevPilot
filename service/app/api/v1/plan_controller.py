@@ -6,7 +6,9 @@ from fastapi import APIRouter, Depends, Request
 from app.api.dependencies import DatabaseSession, MemberUser
 from app.schemas.plan_qo import PlanRequestQO
 from app.schemas.plan_vo import PlanInfoVO, PlanResultVO
+from app.services.document_service import require_document_project
 from app.services.plan_service import PlanService
+from app.services.run_stream_service import NDJSONResponse, stream_response
 
 router = APIRouter(prefix="/projects/{project_id}/planning", tags=["任务规划"])
 
@@ -39,3 +41,26 @@ async def create_proposal(
     planner: PlanDependency,
 ):
     return await planner.create(session, current_user.id, project_id, body.goal)
+
+
+@router.post(
+    "/proposals/stream",
+    response_class=NDJSONResponse,
+    summary="流式任务规划：NDJSON v1 事件",
+)
+async def stream_proposal(
+    project_id: UUID,
+    body: PlanRequestQO,
+    request: Request,
+    session: DatabaseSession,
+    current_user: MemberUser,
+    planner: PlanDependency,
+):
+    await require_document_project(session, current_user.id, project_id)
+    return stream_response(
+        lambda events: planner.create(
+            session, current_user.id, project_id, body.goal, events=events
+        ),
+        "planning",
+        request.state.request_id,
+    )

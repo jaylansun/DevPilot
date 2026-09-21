@@ -16,6 +16,11 @@ import type {
   WorkflowResultVO,
 } from "@/types/api";
 
+import RunTrace from "@/components/RunTrace.vue";
+import type { TraceEvent } from "@/types/stream";
+
+const trace = ref<TraceEvent[]>([]);
+const draft = ref("");
 const props = defineProps<{ projectId: string }>();
 const route = useRoute();
 const info = ref<WorkflowInfoVO | null>(null);
@@ -63,6 +68,8 @@ async function loadInfo() {
 }
 
 function clearResult() {
+  trace.value = [];
+  draft.value = "";
   result.value = null;
   submitted.value = "";
   error.value = "";
@@ -82,6 +89,7 @@ function cancel() {
   runController = undefined;
   controller?.abort();
   sending.value = false;
+  draft.value = "";
   error.value = "已取消等待，输入已保留。服务端可能仍在结束当前计算。";
   requestId.value = "";
 }
@@ -103,6 +111,11 @@ async function run() {
       props.projectId,
       { message: text, intent: intent.value },
       controller.signal,
+      (event) => {
+        if (!active || runController !== controller || controller.signal.aborted) return;
+        if (event.type === "token") draft.value += event.text;
+        else if (event.type === "node" || event.type === "tool") trace.value.push(event);
+      },
     );
     if (active && runController === controller && !controller.signal.aborted)
       result.value = response;
@@ -115,7 +128,7 @@ async function run() {
   } finally {
     if (runController === controller) {
       runController = undefined;
-      if (active) sending.value = false;
+      if (active) { sending.value = false; draft.value = ""; }
     }
   }
 }
@@ -286,6 +299,7 @@ onBeforeUnmount(() => {
         >
           <span class="font-medium">本次输入：</span>{{ submitted }}
         </p>
+        <RunTrace :events="trace" :running="sending" />
         <div v-if="error" class="ui-error" role="alert">
           <p class="m-0">{{ error }}</p>
           <p v-if="requestId" class="mb-0 text-xs wrap-anywhere">
@@ -297,7 +311,11 @@ onBeforeUnmount(() => {
           class="ui-panel text-sm leading-7 text-muted"
           role="status"
         >
-          正在处理本次请求，完成后会一次返回结果和读取记录……
+          <template v-if="draft">
+            <p class="mt-0 text-xs">正在生成，回答与引用尚未校验</p>
+            <p class="m-0 whitespace-pre-wrap wrap-anywhere">{{ draft }}</p>
+          </template>
+          <template v-else>正在处理本次请求，上方会实时显示执行进度；校验完成后展示结果。</template>
         </div>
         <template v-else-if="result">
           <article class="ui-panel min-w-0">

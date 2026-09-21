@@ -28,3 +28,7 @@ export type ToolCallVO = components["schemas"]["ToolCallVO"];
 export type WorkflowRequestQO = components["schemas"]["WorkflowRequestQO"];
 export type WorkflowInfoVO = components["schemas"]["WorkflowInfoVO"];
 export type WorkflowResultVO = components["schemas"]["WorkflowResultVO"];
+export type ApprovalVO = components["schemas"]["ApprovalVO"];
+export type ApprovalPageVO = components["schemas"]["ApprovalPageVO"];
+export type ApprovalDecisionQO = components["schemas"]["ApprovalDecisionQO"];
+export type ConversationVO = components["schemas"]["ConversationVO"];

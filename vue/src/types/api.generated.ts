@@ -1,5 +1,108 @@
 // 由 npm run generate:api 自动生成，请勿手工修改。
 export interface paths {
+  "/api/v1/projects/{project_id}/conversations": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+
+    get: operations["list_conversations_api_v1_projects__project_id__conversations_get"];
+    put?: never;
+
+    post: operations["create_conversation_api_v1_projects__project_id__conversations_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/conversations/{conversation_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+
+    get: operations["get_conversation_api_v1_conversations__conversation_id__get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/conversations/{conversation_id}/runs/stream": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+
+    post: operations["run_conversation_api_v1_conversations__conversation_id__runs_stream_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/approvals": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+
+    get: operations["list_approvals_api_v1_approvals_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/approvals/{approval_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+
+    get: operations["get_approval_api_v1_approvals__approval_id__get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/approvals/{approval_id}/decide/stream": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+
+    post: operations["decide_approval_api_v1_approvals__approval_id__decide_stream_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/me": {
     parameters: {
       query?: never;
@@ -194,6 +297,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/projects/{project_id}/knowledge/questions/stream": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+
+    post: operations["stream_question_api_v1_projects__project_id__knowledge_questions_stream_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/projects/{project_id}/planning": {
     parameters: {
       query?: never;
@@ -228,6 +348,23 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/projects/{project_id}/planning/proposals/stream": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+
+    post: operations["stream_proposal_api_v1_projects__project_id__planning_proposals_stream_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/projects/{project_id}/assistant": {
     parameters: {
       query?: never;
@@ -256,6 +393,23 @@ export interface paths {
     put?: never;
 
     post: operations["run_workflow_api_v1_projects__project_id__assistant_runs_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/projects/{project_id}/assistant/runs/stream": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+
+    post: operations["stream_workflow_api_v1_projects__project_id__assistant_runs_stream_post"];
     delete?: never;
     options?: never;
     head?: never;
@@ -300,11 +454,73 @@ export interface paths {
 export type webhooks = Record<string, never>;
 export interface components {
   schemas: {
+
+    ApprovalDecisionQO: {
+
+      action: "approve" | "edit_and_approve" | "reject";
+      proposal?: components["schemas"]["PlanProposalVO"] | null;
+    };
+
+    ApprovalPageVO: {
+
+      items: components["schemas"]["ApprovalVO"][];
+
+      total: number;
+
+      offset: number;
+
+      limit: number;
+    };
+
+    ApprovalVO: {
+
+      id: string;
+
+      conversation_id: string;
+
+      project_id: string;
+
+      project_name: string;
+
+      goal: string;
+
+      status: "pending" | "processing" | "approved" | "rejected";
+      plan: components["schemas"]["PlanResultVO"];
+      decision: components["schemas"]["ApprovalDecisionQO"] | null;
+
+      reviewer_id: string | null;
+
+      created_tasks: components["schemas"]["CreatedTaskVO"][];
+
+      created_at: string;
+
+      decided_at: string | null;
+    };
+
     Body_create_document_api_v1_projects__project_id__documents_post: {
+
       file: string;
     };
 
+    ConversationCreateQO: {
+
+      goal: string;
+    };
+
+    ConversationVO: {
+
+      id: string;
+
+      project_id: string;
+
+      goal: string;
+
+      status: "new" | "interrupted" | "pending" | "processing" | "approved" | "rejected";
+      approval: components["schemas"]["ApprovalVO"] | null;
+    };
+
     CoveredRequirementVO: {
+
       requirement: string;
 
       explanation: string;
@@ -314,7 +530,19 @@ export interface components {
       task_ids: string[];
     };
 
+    CreatedTaskVO: {
+
+      draft_id: string;
+
+      task_id: string;
+
+      title: string;
+
+      dependency_ids: string[];
+    };
+
     DocumentListVO: {
+
       items: components["schemas"]["DocumentVO"][];
 
       total: number;
@@ -325,20 +553,16 @@ export interface components {
     };
 
     DocumentScopeVO: {
+
       document_id: string;
 
       filename: string;
     };
 
-    DocumentStatus:
-      | "queued"
-      | "indexing"
-      | "ready"
-      | "failed"
-      | "deleting"
-      | "delete_failed";
+    DocumentStatus: "queued" | "indexing" | "ready" | "failed" | "deleting" | "delete_failed";
 
     DocumentVO: {
+
       id: string;
 
       project_id: string;
@@ -358,6 +582,7 @@ export interface components {
     };
 
     GapReportVO: {
+
       summary: string;
 
       covered: components["schemas"]["CoveredRequirementVO"][];
@@ -372,10 +597,12 @@ export interface components {
     };
 
     HTTPValidationError: {
+
       detail?: components["schemas"]["ValidationError"][];
     };
 
     HealthVO: {
+
       status: string;
 
       service: string;
@@ -386,12 +613,14 @@ export interface components {
     };
 
     LoginQO: {
+
       username: string;
 
       password: string;
     };
 
     PlanInfoVO: {
+
       mode: "mock" | "live";
 
       configured: boolean;
@@ -402,6 +631,7 @@ export interface components {
     };
 
     PlanProposalVO: {
+
       summary: string;
 
       assumptions: string[];
@@ -412,10 +642,12 @@ export interface components {
     };
 
     PlanRequestQO: {
+
       goal: string;
     };
 
     PlanResultVO: {
+
       mode: "mock" | "live";
       proposal: components["schemas"]["PlanProposalVO"];
 
@@ -429,12 +661,14 @@ export interface components {
     };
 
     ProjectCreateQO: {
+
       name: string;
 
       description: string;
     };
 
     ProjectPageVO: {
+
       items: components["schemas"]["ProjectVO"][];
 
       total: number;
@@ -445,12 +679,14 @@ export interface components {
     };
 
     ProjectUpdateQO: {
+
       name?: string | null;
 
       description?: string | null;
     };
 
     ProjectVO: {
+
       id: string;
 
       owner_id: string;
@@ -465,6 +701,7 @@ export interface components {
     };
 
     RagAnswerVO: {
+
       answer: string;
 
       sources: components["schemas"]["RagSourceVO"][];
@@ -475,6 +712,7 @@ export interface components {
     };
 
     RagInfoVO: {
+
       mode: "mock" | "live";
 
       configured: boolean;
@@ -483,10 +721,12 @@ export interface components {
     };
 
     RagQuestionQO: {
+
       question: string;
     };
 
     RagSourceVO: {
+
       source_id: number;
 
       document_id: string;
@@ -501,6 +741,7 @@ export interface components {
     };
 
     RequirementEvidenceVO: {
+
       requirement: string;
 
       explanation: string;
@@ -509,6 +750,7 @@ export interface components {
     };
 
     RequirementQuestionVO: {
+
       question: string;
 
       reason: string;
@@ -517,6 +759,7 @@ export interface components {
     };
 
     TaskCreateQO: {
+
       title: string;
 
       description: string;
@@ -529,6 +772,7 @@ export interface components {
     };
 
     TaskDraftVO: {
+
       draft_id: string;
 
       title: string;
@@ -545,6 +789,7 @@ export interface components {
     };
 
     TaskEvidenceVO: {
+
       id: string;
 
       title: string;
@@ -562,6 +807,7 @@ export interface components {
     };
 
     TaskPageVO: {
+
       items: components["schemas"]["TaskVO"][];
 
       total: number;
@@ -576,6 +822,7 @@ export interface components {
     TaskStatus: "todo" | "in_progress" | "done";
 
     TaskUpdateQO: {
+
       version: number;
 
       title?: string | null;
@@ -589,6 +836,7 @@ export interface components {
     };
 
     TaskVO: {
+
       id: string;
 
       project_id: string;
@@ -603,6 +851,10 @@ export interface components {
       acceptance_criteria: string;
       source: components["schemas"]["TaskSource"];
 
+      approval_id?: string | null;
+
+      dependency_ids?: string[];
+
       version: number;
 
       created_at: string;
@@ -611,6 +863,7 @@ export interface components {
     };
 
     TokenVO: {
+
       access_token: string;
 
       token_type: "bearer";
@@ -620,6 +873,7 @@ export interface components {
     };
 
     ToolCallVO: {
+
       name: "search_documents" | "read_task_board";
 
       status: "success" | "empty";
@@ -630,6 +884,7 @@ export interface components {
     UserRole: "member" | "reviewer";
 
     UserVO: {
+
       id: string;
 
       username: string;
@@ -641,6 +896,7 @@ export interface components {
     };
 
     ValidationError: {
+
       loc: (string | number)[];
 
       msg: string;
@@ -653,6 +909,7 @@ export interface components {
     };
 
     WorkflowInfoVO: {
+
       mode: "mock" | "live";
 
       configured: boolean;
@@ -663,30 +920,19 @@ export interface components {
     };
 
     WorkflowRequestQO: {
+
       message: string;
 
-      intent:
-        | "auto"
-        | "knowledge_question"
-        | "task_lookup"
-        | "requirement_check";
+      intent: "auto" | "knowledge_question" | "task_lookup" | "requirement_check";
     };
 
     WorkflowResultVO: {
-      intent:
-        | "knowledge_question"
-        | "task_lookup"
-        | "requirement_check"
-        | "clarify";
+
+      intent: "knowledge_question" | "task_lookup" | "requirement_check" | "clarify";
 
       mode: "mock" | "live";
 
-      status:
-        | "reviewed"
-        | "answered"
-        | "insufficient_evidence"
-        | "demo"
-        | "clarification_needed";
+      status: "reviewed" | "answered" | "insufficient_evidence" | "demo" | "clarification_needed";
 
       answer: string;
       report?: components["schemas"]["GapReportVO"] | null;
@@ -702,6 +948,7 @@ export interface components {
     };
 
     WorkflowScopeVO: {
+
       ready_documents: components["schemas"]["DocumentScopeVO"][];
 
       retrieved_source_count: number;
@@ -727,6 +974,236 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
+  list_conversations_api_v1_projects__project_id__conversations_get: {
+    parameters: {
+      query?: {
+        offset?: number;
+        limit?: number;
+      };
+      header?: never;
+      path: {
+        project_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ConversationVO"][];
+        };
+      };
+
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  create_conversation_api_v1_projects__project_id__conversations_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        project_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ConversationCreateQO"];
+      };
+    };
+    responses: {
+
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ConversationVO"];
+        };
+      };
+
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  get_conversation_api_v1_conversations__conversation_id__get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        conversation_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ConversationVO"];
+        };
+      };
+
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  run_conversation_api_v1_conversations__conversation_id__runs_stream_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        conversation_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/x-ndjson": string;
+        };
+      };
+
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  list_approvals_api_v1_approvals_get: {
+    parameters: {
+      query?: {
+        status?: ("pending" | "processing" | "approved" | "rejected") | null;
+        offset?: number;
+        limit?: number;
+      };
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApprovalPageVO"];
+        };
+      };
+
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  get_approval_api_v1_approvals__approval_id__get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        approval_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ApprovalVO"];
+        };
+      };
+
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  decide_approval_api_v1_approvals__approval_id__decide_stream_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        approval_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ApprovalDecisionQO"];
+      };
+    };
+    responses: {
+
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/x-ndjson": string;
+        };
+      };
+
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
   get_me_api_v1_me_get: {
     parameters: {
       query?: never;
@@ -736,6 +1213,7 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
+
       200: {
         headers: {
           [name: string]: unknown;
@@ -759,6 +1237,7 @@ export interface operations {
       };
     };
     responses: {
+
       200: {
         headers: {
           [name: string]: unknown;
@@ -781,6 +1260,7 @@ export interface operations {
   list_projects_api_v1_projects_get: {
     parameters: {
       query?: {
+
         offset?: number;
 
         limit?: number;
@@ -791,6 +1271,7 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
+
       200: {
         headers: {
           [name: string]: unknown;
@@ -823,6 +1304,7 @@ export interface operations {
       };
     };
     responses: {
+
       201: {
         headers: {
           [name: string]: unknown;
@@ -853,6 +1335,7 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
+
       200: {
         headers: {
           [name: string]: unknown;
@@ -883,6 +1366,7 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
+
       204: {
         headers: {
           [name: string]: unknown;
@@ -915,6 +1399,7 @@ export interface operations {
       };
     };
     responses: {
+
       200: {
         headers: {
           [name: string]: unknown;
@@ -937,6 +1422,7 @@ export interface operations {
   list_tasks_api_v1_projects__project_id__tasks_get: {
     parameters: {
       query?: {
+
         offset?: number;
 
         limit?: number;
@@ -953,6 +1439,7 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
+
       200: {
         headers: {
           [name: string]: unknown;
@@ -987,6 +1474,7 @@ export interface operations {
       };
     };
     responses: {
+
       201: {
         headers: {
           [name: string]: unknown;
@@ -1018,6 +1506,7 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
+
       200: {
         headers: {
           [name: string]: unknown;
@@ -1049,6 +1538,7 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
+
       204: {
         headers: {
           [name: string]: unknown;
@@ -1082,6 +1572,7 @@ export interface operations {
       };
     };
     responses: {
+
       200: {
         headers: {
           [name: string]: unknown;
@@ -1112,6 +1603,7 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
+
       200: {
         headers: {
           [name: string]: unknown;
@@ -1146,6 +1638,7 @@ export interface operations {
       };
     };
     responses: {
+
       202: {
         headers: {
           [name: string]: unknown;
@@ -1177,6 +1670,7 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
+
       202: {
         headers: {
           [name: string]: unknown;
@@ -1208,6 +1702,7 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
+
       202: {
         headers: {
           [name: string]: unknown;
@@ -1238,6 +1733,7 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
+
       200: {
         headers: {
           [name: string]: unknown;
@@ -1272,12 +1768,48 @@ export interface operations {
       };
     };
     responses: {
+
       200: {
         headers: {
           [name: string]: unknown;
         };
         content: {
           "application/json": components["schemas"]["RagAnswerVO"];
+        };
+      };
+
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  stream_question_api_v1_projects__project_id__knowledge_questions_stream_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        project_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["RagQuestionQO"];
+      };
+    };
+    responses: {
+
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/x-ndjson": string;
         };
       };
 
@@ -1302,6 +1834,7 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
+
       200: {
         headers: {
           [name: string]: unknown;
@@ -1336,12 +1869,48 @@ export interface operations {
       };
     };
     responses: {
+
       200: {
         headers: {
           [name: string]: unknown;
         };
         content: {
           "application/json": components["schemas"]["PlanResultVO"];
+        };
+      };
+
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  stream_proposal_api_v1_projects__project_id__planning_proposals_stream_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        project_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PlanRequestQO"];
+      };
+    };
+    responses: {
+
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/x-ndjson": string;
         };
       };
 
@@ -1366,6 +1935,7 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
+
       200: {
         headers: {
           [name: string]: unknown;
@@ -1400,12 +1970,48 @@ export interface operations {
       };
     };
     responses: {
+
       200: {
         headers: {
           [name: string]: unknown;
         };
         content: {
           "application/json": components["schemas"]["WorkflowResultVO"];
+        };
+      };
+
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  stream_workflow_api_v1_projects__project_id__assistant_runs_stream_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        project_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["WorkflowRequestQO"];
+      };
+    };
+    responses: {
+
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/x-ndjson": string;
         };
       };
 
@@ -1428,6 +2034,7 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
+
       200: {
         headers: {
           [name: string]: unknown;
@@ -1449,6 +2056,7 @@ export interface operations {
     };
     requestBody?: never;
     responses: {
+
       200: {
         headers: {
           [name: string]: unknown;

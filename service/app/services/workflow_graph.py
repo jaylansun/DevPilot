@@ -17,6 +17,7 @@ from app.schemas.workflow_vo import (
 )
 from app.services.planning_read_service import PlanningReadService
 from app.services.rag_service import UNKNOWN_ANSWER, build_answer
+from app.services.run_events import NOOP_EVENTS, EventPublisher, trace
 
 
 @dataclass(frozen=True)
@@ -25,6 +26,8 @@ class WorkflowContext:
     project_id: UUID
     documents: PlanningReadService
     board: PlanningReadService
+    events: EventPublisher = NOOP_EVENTS
+    streaming: bool = False
 
 
 class WorkflowState(TypedDict, total=False):
@@ -82,7 +85,7 @@ class WorkflowGraph:
             "clarify": self.clarify,
             "validate_result": self.validate_result,
         }.items():
-            builder.add_node(name, node)
+            builder.add_node(name, self.traced_node(name, node))
         builder.add_edge(START, "classify_intent")
         builder.add_conditional_edges(
             "classify_intent",
@@ -103,6 +106,16 @@ class WorkflowGraph:
             builder.add_edge(node, "validate_result")
         builder.add_edge("validate_result", END)
         self.graph = builder.compile()
+
+    @staticmethod
+    def traced_node(name, node):
+        async def execute(state: WorkflowState, runtime: Runtime[WorkflowContext]):
+            async with trace(runtime.context.events, name):
+                if name == "classify_intent":
+                    return await node(state)
+                return await node(state, runtime)
+
+        return execute
 
     async def classify(self, state: WorkflowState):
         requested = state["requested_intent"]
@@ -194,7 +207,12 @@ class WorkflowGraph:
         if not sources:
             status, answer = "insufficient_evidence", UNKNOWN_ANSWER
         else:
-            response = await self.rag_model.answer(state["message"], sources)
+            response = await self.rag_model.answer(
+                state["message"],
+                sources,
+                events=runtime.context.events,
+                streaming=runtime.context.streaming,
+            )
             grounded = build_answer(response, sources, self.settings.ai_mode)
             status, answer = grounded.status, grounded.answer
             if status == "answered" and self.settings.ai_mode == "mock":

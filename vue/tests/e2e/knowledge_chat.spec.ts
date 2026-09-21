@@ -1,3 +1,4 @@
+import { finalResponse } from "./stream_helpers";
 import { randomUUID } from "node:crypto";
 import { test, expect, type Page } from "@playwright/test";
 
@@ -49,7 +50,7 @@ async function chat(page: Page) {
           ready_documents: state.ready,
         },
       });
-    if (path.endsWith("/knowledge/questions")) {
+    if (path.endsWith("/knowledge/questions/stream")) {
       state.calls++;
       const payload = req.postDataJSON();
       expect(payload).toEqual({ question: expect.any(String) });
@@ -65,8 +66,7 @@ async function chat(page: Page) {
             error: { code: "rag_unavailable", message: "模型服务暂时不可用" },
           },
         });
-      return route.fulfill({
-        json: {
+      return route.fulfill(finalResponse("knowledge", {
           mode: state.mode,
           answer: state.answer ?? (state.unknown
             ? "当前项目文档中没有足够依据回答这个问题。"
@@ -84,8 +84,7 @@ async function chat(page: Page) {
                   text: "创建订单必须填写收货人、手机号和配送地址。<img src=x onerror=alert(1)>",
                 },
               ],
-        },
-      });
+      }));
     }
     return route.fulfill({ status: 404, json: {} });
   });

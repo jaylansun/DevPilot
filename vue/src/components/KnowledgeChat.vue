@@ -4,6 +4,8 @@ import { useRoute } from "vue-router";
 import { ArrowDown, ChatLineRound, Document, Refresh, Top } from "@element-plus/icons-vue";
 import { askKnowledge, getKnowledgeInfo } from "@/api/rag_api";
 import { ApiError, errorMessage } from "@/api/http_client";
+import RunTrace from "@/components/RunTrace.vue";
+import type { TraceEvent } from "@/types/stream";
 import AiPresence from "@/components/AiPresence.vue";
 import SafeMarkdown from "@/components/SafeMarkdown.vue";
 import type { RagAnswerVO, RagInfoVO } from "@/types/api";
@@ -33,6 +35,8 @@ type Turn = {
   question: string;
   answer?: RagAnswerVO;
   error?: string;
+  draft?: string;
+  trace: TraceEvent[];
 };
 const turns = ref<Turn[]>([]);
 const suggestions = [
@@ -158,10 +162,12 @@ async function send(retryTurn?: Turn) {
     return;
   }
   formError.value = "";
-  const turn: Turn = retryTurn ?? { id: nextId++, question: text };
+  const turn: Turn = retryTurn ?? { id: nextId++, question: text, trace: [] };
   if (retryTurn) {
     turn.error = undefined;
     turn.answer = undefined;
+    turn.draft = "";
+    turn.trace = [];
     question.value = text;
   } else {
     turns.value.push(turn);
@@ -174,19 +180,27 @@ async function send(retryTurn?: Turn) {
   pendingTurnId.value = turn.id;
   void scrollToLatest();
   try {
-    const answer = await askKnowledge(props.projectId, { question: text }, controller.signal);
+    const answer = await askKnowledge(props.projectId, { question: text }, controller.signal, (event) => {
+      if (!active || controller.signal.aborted || requestId !== answerRequestId) return;
+      const item = turns.value.find((value) => value.id === turn.id);
+      if (!item) return;
+      if (event.type === "token") item.draft = (item.draft ?? "") + event.text;
+      else if (event.type === "node" || event.type === "tool") item.trace.push(event);
+      void followLatestIfNeeded();
+    });
     // 取消后即使底层请求仍然返回，也不能覆盖当前记录或后续提问。
     if (!active || controller.signal.aborted || requestId !== answerRequestId) return;
     const item = turns.value.find((value) => value.id === turn.id);
-    if (item) item.answer = answer;
+    if (item) { item.answer = answer; item.draft = ""; }
     if (question.value.trim() === text) question.value = "";
   } catch (reason) {
     if (!active || requestId !== answerRequestId) return;
     const item = turns.value.find((value) => value.id === turn.id);
+    if (item) item.draft = "";
     if (item)
       item.error = reason instanceof ApiError && reason.code === "cancelled"
         ? "已停止等待；服务端可能仍在结束当前计算。问题已保留，可再次发送。"
-        : errorMessage(reason);
+        : errorMessage(reason) + (reason instanceof ApiError && reason.requestId ? `（请求编号：${reason.requestId}）` : "");
   } finally {
     if (active && requestId === answerRequestId) {
       pendingTurnId.value = null;
@@ -206,6 +220,7 @@ function stopWaiting() {
   requestController?.abort();
   requestController = undefined;
   pendingTurnId.value = null;
+  item.draft = "";
   item.error = "已停止等待；服务端可能仍在结束当前计算。问题已保留，可再次发送。";
   void nextTick(() => questionInput.value?.focus({ preventScroll: true }));
 }
@@ -366,6 +381,7 @@ onBeforeUnmount(() => {
                   项目助手
                   <span v-if="turn.answer" class="text-xs font-normal text-muted">{{ turn.answer.mode === "mock" ? "检索演示" : "AI 回答" }}<span class="ml-2">{{ turn.answer.status === "insufficient_evidence" ? "资料不足" : "附来源引用" }}</span></span>
                 </p>
+                <RunTrace :events="turn.trace" :running="pendingTurnId === turn.id" />
                 <Transition
                   mode="out-in"
                   enter-active-class="transition-opacity duration-200 ease-out motion-reduce:transition-none"
@@ -401,9 +417,13 @@ onBeforeUnmount(() => {
                       </details>
                     </div>
                   </div>
+                  <div v-else-if="turn.draft" key="streaming" data-testid="streaming-answer">
+                    <p class="mb-2 mt-0 text-xs text-muted">正在生成，回答与引用尚未校验</p>
+                    <p class="m-0 text-base leading-[1.85] whitespace-pre-wrap wrap-anywhere">{{ turn.draft }}</p>
+                  </div>
                   <div v-else key="waiting" class="py-1" role="status">
                     <p class="m-0 flex items-center gap-2.5 text-sm leading-7 text-muted"><span class="size-1.5 shrink-0 animate-pulse rounded-full bg-brand motion-reduce:animate-none" aria-hidden="true" />正在检索资料并准备回答，请稍候……</p>
-                    <p class="mb-0 mt-1 text-xs leading-6 text-muted">完成后会显示回答和引用来源。</p>
+                    <p class="mb-0 mt-1 text-xs leading-6 text-muted">回答将逐步显示，完成校验后展示引用来源。</p>
                   </div>
                 </Transition>
               </div>

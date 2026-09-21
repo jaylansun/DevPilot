@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.task_do import TaskSource, TaskStatus
 
@@ -19,6 +19,8 @@ class TaskVO(BaseModel):
     status: TaskStatus
     acceptance_criteria: str
     source: TaskSource
+    approval_id: UUID | None = None
+    dependency_ids: list[UUID] = Field(default_factory=list)
     version: int
     created_at: datetime
     updated_at: datetime

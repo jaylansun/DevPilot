@@ -1,3 +1,4 @@
+import { finalResponse } from "./stream_helpers";
 import { randomUUID } from "node:crypto";
 import { test, expect, type Page } from "@playwright/test";
 
@@ -39,6 +40,8 @@ async function planning(
   await page.route("**/api/v1/**", async (route) => {
     const req = route.request();
     const path = new URL(req.url()).pathname;
+    if (req.method() === "GET" && path.endsWith("/conversations"))
+      return route.fulfill({ json: [] });
     if (req.method() === "GET" && path.endsWith("/me"))
       return route.fulfill({
         json: { id: randomUUID(), username: "规划测试", role: "member" },
@@ -67,7 +70,7 @@ async function planning(
       });
     if (
       req.method() === "POST" &&
-      path === `/api/v1/projects/${id}/planning/proposals`
+      path === `/api/v1/projects/${id}/planning/proposals/stream`
     ) {
       state.calls++;
       state.goals.push(req.postDataJSON());
@@ -133,7 +136,7 @@ async function planning(
                   },
                 },
               }
-            : { json: response },
+            : finalResponse("planning", response),
         );
       } finally {
         state.completed++;
@@ -167,6 +170,7 @@ test("任务规划入口展示只读草案、验收依赖和安全引用，双�
   ).toHaveAttribute("aria-current", "page");
   await expect(page.getByRole("heading", { name: "把目标变成可执行的计划", exact: true })).toBeVisible();
   await navigation.getByRole("link", { name: "项目概览", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "需求说明", exact: true })).toBeVisible();
   await navigation.getByRole("link", { name: "任务规划", exact: true }).click();
   await expect(page).toHaveURL(`/projects/${id}?tab=planning`);
   await expect(page.getByRole("status")).toContainText("演示模式");
@@ -210,7 +214,7 @@ test("任务规划入口展示只读草案、验收依赖和安全引用，双�
   await expect(toolCalls).toContainText("检索项目文档 · 已完成 · 1 项");
   await expect(toolCalls).toContainText("读取任务看板 · 已完成 · 3 项");
   await expect(
-    page.getByText("仅生成临时草案，暂不支持保存、提交审批或加入看板"),
+    page.getByText("此处生成临时预览，刷新或离开后移除。", { exact: false }),
   ).toBeVisible();
   await expect(
     preview.getByRole("button", { name: /提交审批|保存|加入看板/ }),

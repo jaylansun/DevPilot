@@ -1,8 +1,9 @@
+import { streamRequest } from "./stream_client";
+import type { ProgressEvent } from "@/types/stream";
 import { request } from "./http_client";
 import type {
   WorkflowInfoVO,
   WorkflowRequestQO,
-  WorkflowResultVO,
 } from "@/types/api";
 
 export function getWorkflowInfo(projectId: string, signal?: AbortSignal) {
@@ -15,11 +16,7 @@ export function runWorkflow(
   projectId: string,
   body: WorkflowRequestQO,
   signal?: AbortSignal,
+  onEvent: (event: ProgressEvent) => void = () => undefined,
 ) {
-  return request<WorkflowResultVO>(`/projects/${projectId}/assistant/runs`, {
-    method: "POST",
-    body,
-    signal,
-    timeoutMs: 75_000,
-  });
+  return streamRequest(`/projects/${projectId}/assistant/runs/stream`, "workflow", body, signal, onEvent);
 }

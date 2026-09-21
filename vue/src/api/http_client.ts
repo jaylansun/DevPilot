@@ -27,6 +27,8 @@ type RequestOptions = {
   token?: string | null;
   timeoutMs?: number;
   signal?: AbortSignal;
+  accept?: string;
+  readResponse?: (response: Response, signal: AbortSignal) => Promise<unknown>;
 };
 
 const messages: Record<number, string> = {
@@ -46,7 +48,7 @@ export async function request<T>(
   options: RequestOptions = {},
 ): Promise<T> {
   const token = options.token === undefined ? getToken() : options.token;
-  const headers = new Headers({ Accept: "application/json" });
+  const headers = new Headers({ Accept: options.accept ?? "application/json" });
   if (token) headers.set("Authorization", `Bearer ${token}`);
   const multipart = options.body instanceof FormData;
   if (options.body !== undefined && !multipart)
@@ -72,6 +74,8 @@ export async function request<T>(
             : JSON.stringify(options.body),
       signal: controller.signal,
     });
+    if (response.ok && options.readResponse)
+      return await options.readResponse(response, controller.signal) as T;
     if (response.status === 204) return undefined as T;
     const payload = await response.json().catch(() => null);
     if (!response.ok) {

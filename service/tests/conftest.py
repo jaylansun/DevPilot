@@ -2,10 +2,9 @@ from collections.abc import Callable
 from uuid import uuid4
 
 import pytest
-from fastapi import FastAPI
-
 from app.api.dependencies import get_current_user
 from app.api.error_handlers import register_error_handlers
+from app.api.v1.approval_controller import router as approval_router
 from app.api.v1.document_controller import router as documents_router
 from app.api.v1.plan_controller import router as plan_router
 from app.api.v1.project_controller import router as projects_router
@@ -16,6 +15,7 @@ from app.database import get_db_session
 from app.middleware import request_id_middleware
 from app.middleware.upload_limit_middleware import UploadLimitMiddleware
 from app.models.user_do import UserDO, UserRole
+from fastapi import FastAPI
 
 
 @pytest.fixture
@@ -51,6 +51,7 @@ def api_app_factory() -> Callable[[UserDO | None], FastAPI]:
         app.include_router(rag_router, prefix="/api/v1")
         app.include_router(plan_router, prefix="/api/v1")
         app.include_router(workflow_router, prefix="/api/v1")
+        app.include_router(approval_router, prefix="/api/v1")
 
         async def override_database_session():
             yield object()

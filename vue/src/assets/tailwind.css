@@ -65,7 +65,30 @@
   }
 }
 
-/* 公共模式统一主题；具体页面布局全部保留在 Vue 的 Tailwind 类中。 */
+/* 桌面工作区保持导航可见，长列表和结果在各自面板内滚动；窄屏正常整页滚动。 */
+@layer components {
+  .work-panel { display: flex; flex-direction: column; gap: 12px; min-width: 0; }
+  .work-panel > * { flex-shrink: 0; }
+  .work-split { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; min-width: 0; }
+  .work-scroll { min-width: 0; }
+  .work-toolbar { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+  .work-view-switch { display: inline-flex; align-items: center; gap: 2px; padding: 3px; border: 1px solid var(--color-line); border-radius: 10px; background: var(--color-surface); }
+  .work-view-switch button { min-height: 36px; padding: 0 12px; border-radius: 7px; font-size: 13px; color: var(--color-muted); cursor: pointer; }
+  .work-view-switch button:focus-visible { outline: 2px solid var(--color-brand); outline-offset: 2px; }
+  .work-view-switch button[aria-pressed="true"] { background: var(--color-raised); color: var(--color-brand); font-weight: 600; }
+  @media (max-width: 679px) { .work-view-switch button { min-height: 44px; } }
+  @media (min-width: 1050px) and (min-height: 600px) {
+    .app-shell--workspace { height: 100dvh; min-height: 0; overflow: hidden; }
+    .app-shell--workspace .app-body, .app-shell--workspace .app-main { min-height: 0; }
+    .app-shell--workspace .app-main { overflow: hidden; }
+    .work-panel { flex: 1; min-height: 0; }
+    .work-panel > .work-fill { flex: 1; min-height: 0; }
+    .work-split { grid-template-columns: 300px minmax(0, 1fr); align-items: stretch; }
+    .work-scroll { min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-gutter: stable; }
+  }
+}
+
+/* 公共模式统一主题。 */
 @layer components {
   :root {
     --el-color-primary: var(--color-brand);

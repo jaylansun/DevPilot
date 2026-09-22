@@ -94,6 +94,23 @@ async function library(page: Page) {
 const card = (page: Page, name = "需求说明.md") =>
   page.getByRole("article", { name, exact: true });
 
+test("多份文档在内容区滚动，导航与上传入口保持可见", async ({ page }) => {
+  const { state, doc, open } = await library(page);
+  state.docs = Array.from({ length: 20 }, (_, i) => doc(`需求文档-${i + 1}.md`, "ready"));
+  await page.setViewportSize({ width: 1280, height: 720 });
+  await open();
+  await expect(card(page, "需求文档-20.md")).toBeVisible();
+  const list = page.getByLabel("文档列表", { exact: true });
+  expect(await list.evaluate(el => el.scrollHeight > el.clientHeight)).toBe(true);
+  await card(page, "需求文档-20.md").scrollIntoViewIfNeeded();
+  await expect(card(page, "需求文档-20.md")).toBeInViewport();
+  await expect(page.getByRole("button", { name: "上传文档", exact: true })).toBeInViewport();
+  await expect(page.getByRole("navigation", { name: "项目功能" })).toBeInViewport();
+  expect(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight + 1)).toBe(true);
+  await list.evaluate(el => el.scrollTop = 0);
+  await page.screenshot({ path: "test-results/screenshots/documents-many-desktop.png", animations: "disabled", fullPage: true });
+});
+
 test("知识库上传、状态轮询、刷新保留与删除确认", async ({ page }) => {
   const { state, open } = await library(page);
   await open();

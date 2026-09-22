@@ -6,6 +6,8 @@ import {
   Edit,
   Delete,
   CircleCheck,
+  List,
+  Grid,
 } from "@element-plus/icons-vue";
 import { ElMessage, ElMessageBox } from "element-plus";
 import { ApiError, errorMessage } from "@/api/http_client";
@@ -41,6 +43,7 @@ const {
   loadColumn,
   reload,
 } = useTaskBoard(toRef(props, "projectId"));
+const view = ref<"list" | "board">("list");
 const dialogOpen = ref(false);
 const editingId = ref<string | null>(null);
 const initialStatus = ref<TaskStatus>("todo");
@@ -136,91 +139,32 @@ function clearFilters() {
 </script>
 
 <template>
-  <section aria-label="任务看板">
-    <div
-      class="mb-6 flex items-center justify-between gap-5 [&_h2]:mb-2 [&_h2]:text-xl [&_p]:m-0 [&_p]:text-sm [&_p]:leading-7 [&_p]:text-muted max-mobile:flex-wrap max-mobile:items-start max-mobile:gap-4"
-    >
-      <div>
-        <h2>把目标，变成下一步行动</h2>
-        <p>拆解任务、明确标准，让每一步都有进展。</p>
-      </div>
-      <el-button
-        type="primary"
-        :icon="Plus"
-        class="ui-interactive min-h-11!"
-        :disabled="Boolean(busyId)"
-        @click="create()"
-        >新建任务</el-button
-      >
+  <section aria-label="任务看板" class="work-panel task-workspace">
+    <div class="work-toolbar">
+      <div><h2 class="m-0 text-lg">项目任务</h2><p class="m-0 text-xs leading-6 text-muted">查看进展、调整优先级，点击标题查看完整任务。</p></div>
+      <el-button type="primary" :icon="Plus" :disabled="Boolean(busyId)" @click="create()">新建任务</el-button>
     </div>
-    <div
-      class="mb-[22px] flex flex-wrap items-end justify-between gap-[18px] max-mobile:items-start"
-    >
-      <div class="flex flex-wrap items-end gap-3">
-        <div class="flex flex-col gap-2 text-xs text-muted">
-          <label for="board-status-filter">状态筛选</label
-          ><select
-            id="board-status-filter"
-            v-model="statusFilter"
-            class="ui-select ui-interactive"
-            :disabled="Boolean(busyId)"
-          >
-            <option value="">全部状态</option>
-            <option
-              v-for="column in TASK_COLUMNS"
-              :key="column.status"
-              :value="column.status"
-            >
-              {{ column.label }}
-            </option>
-          </select>
-        </div>
-        <div class="flex flex-col gap-2 text-xs text-muted">
-          <label for="board-priority-filter">优先级筛选</label
-          ><select
-            id="board-priority-filter"
-            v-model.number="priorityFilter"
-            class="ui-select ui-interactive"
-            :disabled="Boolean(busyId)"
-          >
-            <option value="">全部优先级</option>
-            <option
-              v-for="priority in PRIORITIES"
-              :key="priority.value"
-              :value="priority.value"
-            >
-              {{ priority.label }}
-            </option>
-          </select>
-        </div>
-        <el-button
-          v-if="statusFilter || priorityFilter"
-          class="ui-interactive min-h-11!"
-          text
-          :disabled="Boolean(busyId)"
-          @click="clearFilters"
-          >清除筛选</el-button
-        >
+    <div class="work-toolbar">
+      <div class="flex flex-wrap items-center gap-2">
+        <label for="board-status-filter" class="sr-only">状态筛选</label>
+        <select id="board-status-filter" v-model="statusFilter" class="ui-select ui-interactive" :disabled="Boolean(busyId)">
+          <option value="">全部状态</option>
+          <option v-for="column in TASK_COLUMNS" :key="column.status" :value="column.status">{{ column.label }}</option>
+        </select>
+        <label for="board-priority-filter" class="sr-only">优先级筛选</label>
+        <select id="board-priority-filter" v-model.number="priorityFilter" class="ui-select ui-interactive" :disabled="Boolean(busyId)">
+          <option value="">全部优先级</option>
+          <option v-for="priority in PRIORITIES" :key="priority.value" :value="priority.value">{{ priority.label }}</option>
+        </select>
+        <el-button v-if="statusFilter || priorityFilter" text :disabled="Boolean(busyId)" @click="clearFilters">清除筛选</el-button>
+        <span class="text-xs text-muted" role="status">{{ loading ? "正在加载…" : hasError ? "部分任务未能加载" : `共 ${total} 项任务` }}</span>
       </div>
-      <div
-        class="flex items-center gap-3.5 text-xs text-muted max-mobile:w-full max-mobile:justify-between"
-      >
-        <span role="status">{{
-          loading
-            ? "正在加载…"
-            : hasError
-              ? "部分任务未能加载"
-              : `当前筛选共 ${total} 项任务`
-        }}</span
-        ><el-button
-          :icon="Refresh"
-          class="ui-interactive min-h-11! min-w-11!"
-          circle
-          aria-label="刷新任务看板"
-          :loading="loading"
-          :disabled="Boolean(busyId)"
-          @click="reload"
-        />
+      <div class="flex items-center gap-2">
+        <div class="work-view-switch" aria-label="任务显示方式">
+          <button type="button" :aria-pressed="view === 'list'" @click="view = 'list'"><el-icon aria-hidden="true"><List /></el-icon> 列表视图</button>
+          <button type="button" :aria-pressed="view === 'board'" @click="view = 'board'"><el-icon aria-hidden="true"><Grid /></el-icon> 看板视图</button>
+        </div>
+        <el-button :icon="Refresh" text circle aria-label="刷新任务看板" :loading="loading" :disabled="Boolean(busyId)" @click="reload" />
       </div>
     </div>
     <el-alert
@@ -231,25 +175,18 @@ function clearFilters() {
       :closable="false"
       class="mb-[18px]"
     />
-    <div
-      class="ui-enter grid items-start gap-4"
-      :class="
-        visibleColumns.length === 1
-          ? 'grid-cols-1 max-w-[700px]'
-          : 'grid-cols-3 max-board:grid-cols-1'
-      "
-    >
+    <div class="work-fill task-collection" :class="view === 'list' ? 'task-collection--list work-scroll' : 'task-collection--board'" :data-view="view">
       <section
         v-for="column in visibleColumns"
         :key="column.status"
-        class="min-w-0 overflow-hidden rounded-2xl bg-raised/65"
+        class="task-column min-w-0"
         :class="columnColors[column.status]"
         data-testid="task-column"
         :aria-label="`${column.label}任务`"
         :aria-busy="columns[column.status].loading"
       >
         <header
-          class="flex items-center justify-between px-4 py-5 [&_h3]:mt-0 [&_h3]:mb-2 [&_h3]:flex [&_h3]:items-center [&_h3]:gap-2 [&_h3]:text-sm [&_p]:m-0 [&_p]:text-xs [&_p]:text-muted"
+          class="task-column-heading flex items-center justify-between px-3 py-1 [&_h3]:m-0 [&_h3]:flex [&_h3]:items-center [&_h3]:gap-2 [&_h3]:text-sm"
         >
           <div>
             <h3>
@@ -260,7 +197,7 @@ function clearFilters() {
                 >{{ columns[column.status].total }}</span
               >
             </h3>
-            <p>{{ column.hint }}</p>
+
           </div>
           <el-button
             :icon="Plus"
@@ -273,85 +210,30 @@ function clearFilters() {
           />
         </header>
         <div
-          class="flex min-h-[225px] flex-col gap-3 px-3 pb-3 max-board:min-h-40"
+          class="task-column-body"
         >
-          <article
-            v-for="task in columns[column.status].items"
-            :key="task.id"
-            class="ui-interactive min-w-0 rounded-xl bg-surface px-4 pt-4 pb-2.5 shadow-sm shadow-ink/5 focus-within:shadow-md focus-within:shadow-brand/8"
-            :aria-label="task.title"
-          >
-            <div class="mb-3.5 flex items-center justify-between gap-2">
-              <span
-                class="rounded-full px-2 py-1 text-xs font-medium"
-                :class="priorityColors[task.priority]"
-                >{{
-                  PRIORITIES.find(
-                    (priority) => priority.value === task.priority,
-                  )?.label
-                }}</span
-              ><span class="text-xs text-muted">{{
-                task.source === "ai" ? "AI 生成" : "手工创建"
-              }}</span>
+          <article v-for="task in columns[column.status].items" :key="task.id" class="task-item bg-surface" :aria-label="task.title">
+            <div class="task-copy min-w-0">
+              <button type="button" class="ui-interactive block min-h-8 max-w-full text-left text-sm font-semibold text-ink hover:text-brand max-mobile:min-h-11" :title="task.title" :disabled="Boolean(busyId)" @click="edit(task)">
+                <span class="line-clamp-2 wrap-anywhere"><el-icon v-if="task.status === 'done'" class="mr-1 text-success" aria-hidden="true"><CircleCheck /></el-icon>{{ task.title }}</span>
+              </button>
+              <p v-if="task.description" class="task-description m-0 text-xs leading-5 text-muted wrap-anywhere">{{ task.description }}</p>
+              <details v-if="task.acceptance_criteria" class="mt-1 text-xs text-muted">
+                <summary class="ui-interactive min-h-7 cursor-pointer leading-7 hover:text-brand">查看验收标准</summary>
+                <p class="my-2 rounded-lg bg-canvas p-3 leading-6 whitespace-pre-wrap wrap-anywhere">{{ task.acceptance_criteria }}</p>
+              </details>
             </div>
-            <button
-              type="button"
-              class="ui-interactive mt-0 mr-0 mb-2.5 ml-0 block min-h-11 max-w-full cursor-pointer border-0 bg-transparent p-0 text-left text-base font-semibold leading-7 text-ink wrap-anywhere hover:text-brand [&>.el-icon]:mr-1.5 [&>.el-icon]:text-success"
-              :disabled="Boolean(busyId)"
-              @click="edit(task)"
-            >
-              <el-icon v-if="task.status === 'done'" aria-hidden="true"><CircleCheck /></el-icon
-              >{{ task.title }}
-            </button>
-            <p
-              v-if="task.description"
-              class="mb-3 line-clamp-3 text-sm leading-7 whitespace-pre-wrap text-muted wrap-anywhere"
-            >
-              {{ task.description }}
-            </p>
-            <details
-              v-if="task.acceptance_criteria"
-              class="my-2 text-sm text-muted [&>p]:mt-2 [&>p]:mb-3 [&>p]:rounded-lg [&>p]:bg-canvas [&>p]:p-3 [&>p]:leading-7 [&>p]:whitespace-pre-wrap [&>p]:wrap-anywhere"
-            >
-              <summary class="ui-interactive min-h-11 cursor-pointer py-3 hover:text-brand">查看验收标准</summary>
-              <p class="ui-enter">{{ task.acceptance_criteria }}</p>
-            </details>
-            <footer
-              class="mt-2 flex flex-wrap items-center justify-between gap-2 border-t border-line/65 pt-2 [&_.el-button]:min-h-11 [&_.el-button]:min-w-11 [&_.el-button]:text-sm [&_.el-button]:text-muted"
-            >
-              <select
-                :value="task.status"
-                :aria-label="`修改任务 ${task.title} 的状态`"
-                class="ui-interactive min-h-11 max-w-[110px] cursor-pointer rounded-lg border-0 bg-canvas p-2 text-xs text-muted hover:bg-raised focus-visible:outline-2 focus-visible:outline-focus focus-visible:outline-offset-2 disabled:cursor-wait disabled:opacity-60"
-                :disabled="Boolean(busyId)"
-                @change="move(task, $event)"
-              >
-                <option
-                  v-for="target in TASK_COLUMNS"
-                  :key="target.status"
-                  :value="target.status"
-                >
-                  {{ target.label }}
-                </option>
+            <div class="task-priority flex flex-wrap items-center gap-2">
+              <span class="rounded-md px-2 py-1 text-xs font-medium" :class="priorityColors[task.priority]">{{ PRIORITIES.find(priority => priority.value === task.priority)?.label }}</span>
+              <span class="text-[11px] text-muted">{{ task.source === 'ai' ? 'AI 生成' : '手工创建' }}</span>
+            </div>
+            <footer class="task-controls flex items-center gap-1">
+              <select :value="task.status" :aria-label="`修改任务 ${task.title} 的状态`" class="ui-interactive min-h-10 w-24 cursor-pointer rounded-lg border border-line bg-surface px-2 text-xs text-muted" :disabled="Boolean(busyId)" @change="move(task, $event)">
+                <option v-for="target in TASK_COLUMNS" :key="target.status" :value="target.status">{{ target.label }}</option>
               </select>
-              <div class="flex gap-2 [&>.el-button+.el-button]:ml-0">
-                <el-button
-                  :icon="Edit"
-                  class="ui-interactive"
-                  text
-                  circle
-                  :aria-label="`编辑任务 ${task.title}`"
-                  :disabled="Boolean(busyId)"
-                  @click="edit(task)"
-                /><el-button
-                  :icon="Delete"
-                  class="ui-interactive"
-                  text
-                  circle
-                  :aria-label="`删除任务 ${task.title}`"
-                  :disabled="Boolean(busyId)"
-                  @click="remove(task)"
-                />
+              <div class="flex [&>.el-button+.el-button]:ml-0">
+                <el-button :icon="Edit" text circle :aria-label="`编辑任务 ${task.title}`" :disabled="Boolean(busyId)" @click="edit(task)" />
+                <el-button :icon="Delete" text circle :aria-label="`删除任务 ${task.title}`" :disabled="Boolean(busyId)" @click="remove(task)" />
               </div>
             </footer>
           </article>
@@ -381,12 +263,8 @@ function clearFilters() {
           </div>
           <div
             v-else-if="!columns[column.status].items.length"
-            class="px-2.5 py-[30px] text-center text-xs text-muted"
+            class="task-empty px-3 py-3 text-xs text-muted"
           >
-            <span
-              class="mx-auto mb-4 grid size-10 place-items-center rounded-xl bg-surface/70 text-lg"
-              >—</span
-            >
             <p>
               {{ priorityFilter ? "没有符合筛选条件的任务" : "这里还没有任务" }}
             </p>
@@ -407,7 +285,7 @@ function clearFilters() {
         </div>
       </section>
     </div>
-    <p class="mt-5 mb-0 text-xs leading-[1.8] text-muted">
+    <p class="m-0 text-xs leading-5 text-muted">
       任务修改会保存到当前项目。点击任务标题可查看完整内容或编辑。
     </p>
     <TaskDialog
@@ -420,3 +298,41 @@ function clearFilters() {
     />
   </section>
 </template>
+
+<style scoped>
+.task-collection--list { border: 1px solid var(--color-line); border-radius: 14px; background: var(--color-surface); }
+.task-collection--list .task-column + .task-column { border-top: 1px solid var(--color-line); }
+.task-column-heading { background: var(--color-raised); }
+.task-collection--list .task-column-heading { position: sticky; top: 0; z-index: 1; }
+.task-item { padding: 12px 16px; }
+.task-collection--list .task-item { display: grid; grid-template-columns: minmax(0, 1fr) 110px 184px; align-items: center; gap: 20px; border-top: 1px solid var(--color-line); }
+.task-collection--list .task-copy { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; column-gap: 12px; }
+.task-collection--list .task-copy > button { grid-column: 1 / -1; }
+.task-collection--list .task-copy > details { margin-top: 0; }
+.task-collection--list .task-copy > details[open] { grid-column: 1 / -1; }
+.task-collection--list .task-copy > details > summary { white-space: nowrap; }
+.task-collection--list .task-description { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+.task-collection--list .task-priority { flex-direction: column; align-items: flex-start; }
+.task-empty { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.task-empty p { margin: 0; }
+.task-collection--board { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.task-collection--board:has(> :only-child) { grid-template-columns: minmax(0, 1fr); }
+.task-collection--board .task-column { display: flex; flex-direction: column; min-height: 0; border: 1px solid var(--color-line); border-radius: 14px; background: var(--color-raised); overflow: hidden; }
+.task-collection--board .task-column-heading { flex-shrink: 0; }
+.task-collection--board .task-column-body { padding: 0 10px 10px; }
+.task-collection--board .task-item { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; padding: 12px; border: 1px solid var(--color-line); border-radius: 10px; }
+.task-collection--board .task-priority { order: -1; justify-content: space-between; }
+.task-collection--board .task-description { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.task-collection--board .task-controls { justify-content: space-between; }
+@media (min-width: 1050px) and (min-height: 600px) {
+  .task-collection--board .task-column-body { flex: 1; min-height: 0; overflow-y: auto; overscroll-behavior-y: contain; scrollbar-gutter: stable; }
+}
+@media (max-width: 1049px) {
+  .task-collection--board { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 849px) {
+  .task-collection--list .task-item { grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; padding: 12px; }
+  .task-collection--list .task-copy { grid-column: 1 / -1; }
+  .task-collection--list .task-priority { flex-direction: row; }
+}
+</style>

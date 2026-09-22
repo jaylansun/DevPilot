@@ -32,7 +32,7 @@ async function load() {
 }
 async function submit(id?: string) {
   if (busy.value || (!id && props.disabled)) return;
-  if (!id && !props.goal.trim()) { message.value = "请先填写上方的规划目标"; return; }
+  if (!id && !props.goal.trim()) { message.value = "请先填写规划目标"; return; }
   busy.value = true; emit("busy", true); message.value = ""; trace.value = []; selected.value = null;
   const current = new AbortController(); controller = current;
   try {
@@ -57,9 +57,9 @@ onBeforeUnmount(() => { active = false; controller?.abort(); loader?.abort(); })
 </script>
 
 <template>
-  <section aria-label="持久规划与审批" class="mt-6 min-w-0 rounded-2xl border border-line bg-surface p-5 mobile:p-7">
+  <section aria-label="持久规划与审批" class="min-w-0 rounded-xl border border-line bg-surface p-4">
     <div class="flex flex-wrap items-start justify-between gap-3">
-      <div><h3 class="m-0 text-lg font-semibold">生成并提交审批</h3><p class="mt-2 mb-0 text-sm leading-7 text-muted">根据上方目标生成一份新方案并保存。审批人批准后，任务才会加入看板。</p></div>
+      <div><h3 class="m-0 text-base font-semibold">生成并提交审批</h3><p class="mt-1 mb-0 text-xs leading-6 text-muted">根据当前目标生成并保存新方案，审批人批准后加入看板。</p></div>
       <div class="flex flex-wrap gap-2 [&>.el-button+.el-button]:ml-0">
         <el-button type="primary" :disabled="disabled || !goal.trim() || busy" :loading="busy" @click="submit()">生成并提交审批</el-button>
         <el-button v-if="busy" @click="controller?.abort()">停止等待</el-button>
@@ -69,9 +69,9 @@ onBeforeUnmount(() => { active = false; controller?.abort(); loader?.abort(); })
     <p v-if="message" class="ui-error" role="alert">{{ message }}</p>
     <RunTrace :events="trace" :running="busy" />
     <p v-if="!items.length && !loading" class="text-sm leading-7 text-muted">还没有保存的规划记录。</p>
-    <ul class="my-4 list-none space-y-3 p-0" aria-label="规划记录">
-      <li v-for="item in items" :key="item.id" class="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-raised/60 p-4">
-        <div class="min-w-0 flex-1"><p class="m-0 text-sm leading-7 wrap-anywhere">{{ item.goal }}</p><p class="mt-1 mb-0 text-xs text-muted">{{ labels[item.status] }}</p></div>
+    <ul class="my-4 max-h-64 list-none space-y-2 overflow-y-auto overscroll-y-contain p-0" aria-label="规划记录">
+      <li v-for="item in items" :key="item.id" class="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-raised/60 p-3">
+        <div class="min-w-0 flex-1"><p class="m-0 line-clamp-2 text-sm leading-6 wrap-anywhere" :title="item.goal">{{ item.goal }}</p><p class="mt-1 mb-0 text-xs text-muted">{{ labels[item.status] }}</p></div>
         <el-button v-if="item.approval" :disabled="busy" @click="selected = item.approval">查看方案</el-button>
         <el-button v-else :disabled="busy || disabled" @click="submit(item.id)">继续生成并提交</el-button>
       </li>
@@ -80,6 +80,6 @@ onBeforeUnmount(() => { active = false; controller?.abort(); loader?.abort(); })
       <el-button :disabled="!offset || busy || loading" @click="page(-20)">上一页</el-button>
       <el-button :disabled="items.length < 20 || busy || loading" @click="page(20)">下一页</el-button>
     </div>
-    <ApprovalDetails v-if="selected" :approval="selected" class="mt-6 border-t border-line pt-6" />
+    <ApprovalDetails v-if="selected" :approval="selected" class="mt-4 border-t border-line pt-4" />
   </section>
 </template>

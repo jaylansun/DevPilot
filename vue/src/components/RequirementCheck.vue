@@ -147,11 +147,11 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section aria-label="项目需求检查" class="min-w-0 space-y-5">
+  <section aria-label="项目需求检查" class="work-panel">
     <div class="flex flex-wrap items-start justify-between gap-3">
       <div>
-        <h2 class="m-0 text-xl font-semibold">需求写了，任务安排全了吗？</h2>
-        <p class="mt-2 mb-0 text-sm leading-7 text-muted">
+        <h2 class="m-0 text-lg font-semibold">需求检查</h2>
+        <p class="mt-1 mb-0 text-xs leading-6 text-muted">
           对照文档和看板，找出可能遗漏的需求与需要确认的问题。
         </p>
       </div>
@@ -185,7 +185,7 @@ onBeforeUnmount(() => {
     </p>
     <p
       v-if="info?.mode === 'mock'"
-      class="rounded-xl bg-raised px-4 py-3 text-sm leading-7 text-muted"
+      class="m-0 rounded-lg bg-raised px-3 py-2 text-xs leading-5 text-muted"
     >
       演示模式会读取真实资料和任务，但不会分析需求覆盖或生成遗漏结论。自动分类采用简单规则，也可以手动选择用途。
     </p>
@@ -202,10 +202,10 @@ onBeforeUnmount(() => {
     </p>
 
     <div
-      class="grid min-w-0 items-start gap-6 board:grid-cols-[300px_minmax(0,1fr)] desktop:grid-cols-[340px_minmax(0,1fr)]"
+      class="work-fill work-split"
     >
       <form
-        class="ui-panel min-w-0 space-y-4 board:sticky board:top-6"
+        class="work-scroll ui-panel p-4! min-w-0 space-y-3"
         @submit.prevent="run"
       >
         <div>
@@ -292,7 +292,7 @@ onBeforeUnmount(() => {
         </p>
       </form>
 
-      <div class="min-w-0 space-y-5" aria-live="polite" :aria-busy="sending">
+      <div class="work-scroll min-w-0 space-y-3" aria-live="polite" :aria-busy="sending">
         <p
           v-if="submitted"
           class="m-0 rounded-xl bg-brand/5 px-4 py-3 text-sm leading-7 whitespace-pre-wrap wrap-anywhere"
@@ -318,7 +318,7 @@ onBeforeUnmount(() => {
           <template v-else>正在处理本次请求，上方会实时显示执行进度；校验完成后展示结果。</template>
         </div>
         <template v-else-if="result">
-          <article class="ui-panel min-w-0">
+          <article class="ui-panel p-4! min-w-0">
             <div class="flex flex-wrap items-center justify-between gap-3">
               <h3 class="m-0 text-base">{{ intentLabels[result.intent] }}</h3>
               <el-button text @click="clearResult">清空结果</el-button>
@@ -355,7 +355,7 @@ onBeforeUnmount(() => {
                 }}</strong>
               </div>
             </div>
-            <section class="ui-panel min-w-0" aria-label="已有对应任务">
+            <section class="ui-panel p-4! min-w-0" aria-label="已有对应任务">
               <h3 class="mt-0 flex items-center gap-2 text-base">
                 <el-icon class="text-success"><CircleCheck /></el-icon
                 >已有对应任务
@@ -390,7 +390,7 @@ onBeforeUnmount(() => {
                 >
               </article>
             </section>
-            <section class="ui-panel min-w-0" aria-label="可能遗漏">
+            <section class="ui-panel p-4! min-w-0" aria-label="可能遗漏">
               <h3 class="mt-0 flex items-center gap-2 text-base">
                 <el-icon class="text-warning"><Warning /></el-icon>可能遗漏
               </h3>
@@ -420,7 +420,7 @@ onBeforeUnmount(() => {
                 >
               </article>
             </section>
-            <section class="ui-panel min-w-0" aria-label="需要确认">
+            <section class="ui-panel p-4! min-w-0" aria-label="需要确认">
               <h3 class="mt-0 flex items-center gap-2 text-base">
                 <el-icon class="text-brand"><ChatLineRound /></el-icon>需要确认
               </h3>
@@ -450,7 +450,7 @@ onBeforeUnmount(() => {
 
           <section
             v-if="result.intent === 'task_lookup'"
-            class="ui-panel min-w-0"
+            class="ui-panel p-4! min-w-0"
             aria-label="查询到的任务"
           >
             <h3 class="mt-0 text-base">匹配任务 · {{ result.tasks.length }}</h3>
@@ -482,7 +482,7 @@ onBeforeUnmount(() => {
             </article>
           </section>
 
-          <section class="ui-panel min-w-0" aria-label="依据与检查范围">
+          <section class="ui-panel p-4! min-w-0" aria-label="依据与检查范围">
             <h3 class="mt-0 text-base">依据与检查范围</h3>
             <p class="text-sm leading-7 text-muted">
               {{ result.scope.limitation }}

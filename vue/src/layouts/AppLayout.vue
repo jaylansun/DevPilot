@@ -22,7 +22,7 @@ function signOut() {
 </script>
 
 <template>
-  <div class="flex min-h-dvh max-mobile:block">
+  <div class="app-shell flex min-h-dvh max-mobile:block" :class="{ 'app-shell--workspace': route.name === 'project' || route.name === 'reviewer' }">
     <a class="fixed -top-20 left-4 z-[5000] rounded-xl bg-brand px-5 py-3 text-white focus:top-3" href="#main-content">跳到页面内容</a>
     <aside class="sticky top-0 flex h-dvh shrink-0 flex-col border-r border-line/70 bg-sidebar px-4 py-6 max-mobile:static max-mobile:h-auto max-mobile:w-full max-mobile:flex-row max-mobile:flex-wrap max-mobile:items-center max-mobile:gap-3 max-mobile:border-r-0 max-mobile:border-b max-mobile:px-4 max-mobile:py-3"
       :class="collapsed ? 'w-20' : 'w-[224px]'">
@@ -51,14 +51,14 @@ function signOut() {
         <el-button text circle aria-label="退出登录" title="退出登录" @click="signOut"><el-icon><SwitchButton /></el-icon></el-button>
       </div>
     </aside>
-    <div class="flex min-w-0 flex-1 flex-col">
+    <div class="app-body flex min-w-0 flex-1 flex-col">
       <header v-if="route.name !== 'project'" class="flex min-h-16 items-center justify-between gap-4 px-10 max-mobile:min-h-12 max-mobile:px-4">
         <div class="flex min-w-0 items-center gap-3 text-[13px] text-muted">
           <span>个人工作区</span><span class="text-muted/60" aria-hidden="true">/</span><span class="text-ink">{{ route.meta.title }}</span>
         </div>
         <span class="text-xs text-muted max-mobile:hidden">DevPilot</span>
       </header>
-      <main id="main-content" tabindex="-1" class="mx-auto flex w-full max-w-[1560px] min-w-0 flex-1 flex-col outline-none max-mobile:px-4 max-mobile:pb-4 max-mobile:pt-3"
+      <main id="main-content" tabindex="-1" class="app-main mx-auto flex w-full max-w-[1560px] min-w-0 flex-1 flex-col outline-none max-mobile:px-4 max-mobile:pb-4 max-mobile:pt-3"
         :class="route.name === 'project' ? 'px-6 pb-4 pt-4' : 'px-10 pb-8 pt-5'">
         <RouterView v-slot="{ Component }"><Transition name="page" mode="out-in"><component :is="Component" :key="route.path" /></Transition></RouterView>
       </main>

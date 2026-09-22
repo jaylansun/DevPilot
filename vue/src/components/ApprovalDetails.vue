@@ -22,11 +22,15 @@ const labels = { pending: "等待审批", processing: "决定已记录，待完�
         <li v-for="(text, i) in proposal.risks" :key="'r' + i">风险：{{ text }}</li>
       </ul>
     </details>
-    <article v-for="task in proposal.tasks" :key="task.draft_id" class="rounded-xl border border-line p-4">
-      <h4 class="mt-0 mb-2 text-base font-semibold wrap-anywhere">{{ task.draft_id }} · {{ task.title }} <span class="text-xs text-muted">P{{ task.priority }}</span></h4>
-      <p class="whitespace-pre-wrap text-sm leading-7 wrap-anywhere">{{ task.description }}</p>
-      <p class="whitespace-pre-wrap text-sm leading-7 wrap-anywhere">验收：{{ task.acceptance_criteria }}</p>
-      <p class="mb-0 text-xs leading-6 text-muted">前置依赖：{{ task.dependencies.join('、') || '无' }} · 来源：{{ task.source_ids.map(id => `[${id}]`).join(' ') || '人工核对' }}</p>
+    <article v-for="task in proposal.tasks" :key="task.draft_id" class="rounded-xl border border-line px-3">
+      <details>
+        <summary class="min-h-11 cursor-pointer py-3 text-sm font-semibold wrap-anywhere">{{ task.draft_id }} · {{ task.title }} <span class="text-xs font-normal text-muted">P{{ task.priority }}</span></summary>
+        <div class="border-t border-line pb-3">
+          <p class="whitespace-pre-wrap text-sm leading-6 wrap-anywhere">{{ task.description }}</p>
+          <p class="whitespace-pre-wrap text-sm leading-6 wrap-anywhere">验收：{{ task.acceptance_criteria }}</p>
+          <p class="mb-0 text-xs leading-6 text-muted">前置依赖：{{ task.dependencies.join('、') || '无' }} · 来源：{{ task.source_ids.map(id => `[${id}]`).join(' ') || '人工核对' }}</p>
+        </div>
+      </details>
     </article>
     <details class="rounded-xl border border-line p-4">
       <summary class="cursor-pointer text-sm font-medium">查看提交时的文档依据</summary>

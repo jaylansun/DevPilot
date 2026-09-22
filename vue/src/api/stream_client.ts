@@ -107,7 +107,10 @@ export function streamRequest<K extends RunKind>(
   onEvent: (event: ProgressEvent) => void,
 ) {
   return request<Results[K]>(path, {
-    method: "POST", body, signal, timeoutMs: 75_000, accept: "application/x-ndjson",
+    method: "POST", body, signal,
+    // 规划服务 120 秒，流式收尾 130 秒；浏览器留出传输时间，避免提前掐断。
+    timeoutMs: kind === "planning" || kind === "approval" ? 140_000 : 75_000,
+    accept: "application/x-ndjson",
     readResponse: (response, combinedSignal) => readNDJSON(response, kind, onEvent, combinedSignal),
   });
 }

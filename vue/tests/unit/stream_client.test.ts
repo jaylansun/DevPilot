@@ -102,4 +102,32 @@ describe("NDJSON 客户端", () => {
     expect(stepNames).toEqual(contract.steps);
     for (const event of contract.events) expect(parseStreamEvent(JSON.stringify(event))).toEqual(event);
   });
+
+  it.each(["planning", "approval"] as const)("%s 等待草案超过旧的 75 秒后仍可正常完成", async kind => {
+    vi.useFakeTimers();
+    let writer!: ReadableStreamDefaultController;
+    const cancel = vi.fn();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(new ReadableStream({
+      start(controller) { writer = controller; }, cancel,
+    }), { headers: { "Content-Type": "application/x-ndjson" } })));
+    const sample = contract.events.find(event => event.type === "final" && event.kind === kind)!;
+    const pending = expect(streamRequest("/test", kind, {}, undefined, () => undefined)).resolves.toEqual(sample.result);
+    await vi.advanceTimersByTimeAsync(80_000);
+    expect(cancel).not.toHaveBeenCalled();
+    writer.enqueue(encode(line({ ...sample, seq: 1 })));
+    await pending;
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+
+  it.each(["planning", "approval"] as const)("%s 延长等待后仍受 140 秒总时限约束", async kind => {
+    vi.useFakeTimers();
+    const cancel = vi.fn();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(new ReadableStream({ cancel }), {
+      headers: { "Content-Type": "application/x-ndjson" },
+    })));
+    const pending = expect(streamRequest("/test", kind, {}, undefined, () => undefined)).rejects.toMatchObject({ code: "timeout" });
+    await vi.advanceTimersByTimeAsync(140_000);
+    await pending;
+    expect(cancel).toHaveBeenCalledOnce();
+  });
 });

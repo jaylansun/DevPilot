@@ -134,6 +134,51 @@ const column = (page: Page, label: string) =>
 const card = (page: Page, title: string) =>
   page.getByRole("article", { name: title, exact: true });
 
+test("多任务默认全宽列表，加载更多及看板切换不撑高桌面页面", async ({ page }) => {
+  const { add, open } = await taskWorkspace(page);
+  for (let i = 1; i <= 20; i++) {
+    const task = add(`任务 ${i}：实现订单状态管理和异常处理`, "todo", 1);
+    task.description = "校验订单、库存和收货信息，失败时保留输入并显示原因。".repeat(20);
+    task.acceptance_criteria = "重复请求不会重复生成订单。".repeat(20);
+  }
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await open();
+  await expect(page.getByRole("button", { name: "列表视图", exact: true })).toHaveAttribute("aria-pressed", "true");
+  const list = page.locator('[data-view="list"]');
+  const row = column(page, "待办").getByRole("article").first();
+  const listBox = (await list.boundingBox())!;
+  const rowBox = (await row.boundingBox())!;
+  expect(rowBox.width).toBeGreaterThan(listBox.width * 0.95);
+  expect(rowBox.height).toBeLessThan(150);
+  await column(page, "待办").getByRole("button", { name: /加载更多/ }).click();
+  await expect(column(page, "待办").getByRole("article")).toHaveCount(16);
+  await expect.poll(() => page.evaluate(() => document.documentElement.scrollHeight - innerHeight)).toBeLessThanOrEqual(1);
+  expect(await list.evaluate(el => el.scrollHeight > el.clientHeight)).toBe(true);
+  await list.evaluate(el => el.scrollTop = 0);
+  await page.screenshot({ path: "test-results/screenshots/task-list-many-desktop.png", animations: "disabled", fullPage: true });
+  await row.getByRole("button", { name: /^任务 1：/ }).click();
+  await expect(page.getByLabel("任务说明", { exact: true })).toHaveValue(/保留输入/);
+  await page.getByRole("button", { name: "取消", exact: true }).click();
+  await page.getByRole("button", { name: "看板视图", exact: true }).click();
+  await expect(column(page, "待办").getByRole("article")).toHaveCount(16);
+  const body = column(page, "待办").locator(".task-column-body");
+  expect(await body.evaluate(el => el.scrollHeight > el.clientHeight)).toBe(true);
+  const otherColumn = (await column(page, "进行中").boundingBox())!;
+  await body.evaluate(el => el.scrollTop = el.scrollHeight);
+  expect((await column(page, "进行中").boundingBox())!.y).toBe(otherColumn.y);
+  await expect(page.getByRole("navigation", { name: "项目功能" })).toBeInViewport();
+  await page.setViewportSize({ width: 1280, height: 720 });
+  expect(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight + 1)).toBe(true);
+  await page.getByLabel("状态筛选", { exact: true }).selectOption("todo");
+  await page.getByRole("button", { name: "列表视图", exact: true }).click();
+  await expect(page.getByTestId("task-column")).toHaveCount(1);
+  await page.setViewportSize({ width: 390, height: 844 });
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await row.getByRole("button", { name: /^任务 1：/ }).scrollIntoViewIfNeeded();
+  await expect(row.getByRole("button", { name: /^任务 1：/ })).toBeInViewport();
+  await page.screenshot({ path: "test-results/screenshots/task-list-many-mobile.png", animations: "disabled" });
+});
+
 test("任务完整增删改查、验收标准与状态流转", async ({ page }) => {
   const { state, open } = await taskWorkspace(page);
   await open();
@@ -349,6 +394,7 @@ test("桌面与手机看板和表单布局", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 1000 });
   await open();
   await expect(card(page, "完成数据库表设计")).toBeVisible();
+  await page.getByRole("button", { name: "看板视图", exact: true }).click();
   // 不只检查元素存在，还验证打包后的动态颜色和布局确实生效。
   await expect(
     page.getByRole("button", { name: "新建任务", exact: true }),

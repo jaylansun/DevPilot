@@ -61,7 +61,7 @@ onMounted(loadProject);
       <ProjectTabs />
       <Transition name="content" mode="out-in">
       <component v-if="activeComponent" :is="activeComponent" :key="String(route.query.tab)" :project-id="project.id" />
-      <div v-else class="grid grid-cols-[minmax(0,1fr)_300px] items-start gap-7 max-tablet:grid-cols-1">
+      <div v-else class="work-scroll grid grid-cols-[minmax(0,1fr)_280px] items-start gap-5 max-tablet:grid-cols-1">
         <article class="ui-panel">
           <div class="flex items-center gap-3 pb-2">
             <el-icon class="text-muted"><Document /></el-icon><h2 class="m-0 text-lg">需求说明</h2>

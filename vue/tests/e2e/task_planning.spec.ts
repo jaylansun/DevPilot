@@ -160,6 +160,26 @@ async function planning(
   };
 }
 
+test("长方案在结果区滚动，预览和审批切换保留目标与草案", async ({ page }) => {
+  await page.setViewportSize({ width: 1280, height: 720 });
+  const { state } = await planning(page);
+  state.summary = "下单时检查库存并防止重复提交。".repeat(100);
+  await page.getByLabel("你想完成什么目标？").fill("完善下单流程");
+  await page.getByRole("button", { name: "生成任务草案", exact: true }).click();
+  const preview = page.getByRole("region", { name: "任务方案预览" });
+  await expect(preview).toBeVisible();
+  await preview.getByLabel("已完成只读工具调用", { exact: true }).scrollIntoViewIfNeeded();
+  await expect(page.getByRole("navigation", { name: "项目功能" })).toBeInViewport();
+  expect(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight + 1)).toBe(true);
+  await page.getByRole("button", { name: "提交与审批", exact: true }).click();
+  await expect(preview).toBeHidden();
+  await expect(page.getByRole("button", { name: "生成并提交审批", exact: true })).toBeInViewport();
+  await expect(page.getByLabel("你想完成什么目标？")).toHaveValue("完善下单流程");
+  await page.getByRole("button", { name: "草案预览", exact: true }).click();
+  await expect(preview).toContainText(state.summary);
+  expect(state.calls).toBe(1);
+});
+
 test("任务规划入口展示只读草案、验收依赖和安全引用，双端布局正常", async ({
   page,
 }) => {
@@ -168,14 +188,14 @@ test("任务规划入口展示只读草案、验收依赖和安全引用，双�
   await expect(
     navigation.getByRole("link", { name: "任务规划", exact: true }),
   ).toHaveAttribute("aria-current", "page");
-  await expect(page.getByRole("heading", { name: "把目标变成可执行的计划", exact: true })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "任务规划", exact: true })).toBeVisible();
   await navigation.getByRole("link", { name: "项目概览", exact: true }).click();
   await expect(page.getByRole("heading", { name: "需求说明", exact: true })).toBeVisible();
   await navigation.getByRole("link", { name: "任务规划", exact: true }).click();
   await expect(page).toHaveURL(`/projects/${id}?tab=planning`);
   await expect(page.getByRole("status")).toContainText("演示模式");
   const conversation = page.getByRole("region", { name: "规划对话" });
-  await expect(conversation).toContainText("这次，你想推进什么？");
+  await expect(conversation).toContainText("规划目标");
   await expect(page.getByLabel("任务草案工作区")).toContainText("任务计划将在这里展开");
 
   await page.getByLabel("你想完成什么目标？").fill("  完成可靠的下单流程  ");
@@ -214,7 +234,7 @@ test("任务规划入口展示只读草案、验收依赖和安全引用，双�
   await expect(toolCalls).toContainText("检索项目文档 · 已完成 · 1 项");
   await expect(toolCalls).toContainText("读取任务看板 · 已完成 · 3 项");
   await expect(
-    page.getByText("此处生成临时预览，刷新或离开后移除。", { exact: false }),
+    page.getByText("草案为临时预览。", { exact: false }),
   ).toBeVisible();
   await expect(
     preview.getByRole("button", { name: /提交审批|保存|加入看板/ }),
@@ -275,22 +295,22 @@ test("建议目标只填入并聚焦，任务可用键盘展开且尊重减少�
   await page.getByRole("button", { name: "生成任务草案", exact: true }).click();
   const preview = page.getByRole("region", { name: "任务方案预览" });
   await expect(preview).toBeVisible();
-  await expect(preview.getByRole("heading", { name: "任务方案预览", exact: true })).toHaveCSS("font-size", "24px");
+  await expect(preview.getByRole("heading", { name: "任务方案预览", exact: true })).toHaveCSS("font-size", "18px");
   expect(await preview.evaluate((element) => parseFloat(getComputedStyle(element).animationDuration))).toBeGreaterThan(0);
   const firstTask = preview.getByRole("article", { name: "任务 T1：实现订单收货信息", exact: true });
   const taskDetails = firstTask.locator("details");
   const taskSummary = taskDetails.locator("summary");
-  await expect(taskDetails).toHaveJSProperty("open", true);
+  await expect(taskDetails).toHaveJSProperty("open", false);
   await taskSummary.focus();
   await taskSummary.press("Enter");
-  await expect(taskDetails).toHaveJSProperty("open", false);
-  await expect(firstTask.locator("dd").first()).toBeHidden();
+  await expect(taskDetails).toHaveJSProperty("open", true);
+  await expect(firstTask.locator("dd").first()).toBeVisible();
   await page.emulateMedia({ reducedMotion: "reduce" });
   await expect(preview).toHaveCSS("animation-duration", "0s");
   await expect(taskSummary).toHaveCSS("transition-duration", "0s");
   await taskSummary.press("Enter");
-  await expect(taskDetails).toHaveJSProperty("open", true);
-  await expect(firstTask.locator("dd").first()).toBeVisible();
+  await expect(taskDetails).toHaveJSProperty("open", false);
+  await expect(firstTask.locator("dd").first()).toBeHidden();
   expect(state.calls).toBe(1);
   expect(state.unexpectedRequests).toEqual([]);
 });

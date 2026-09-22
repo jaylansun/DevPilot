@@ -26,7 +26,9 @@ from test_rag_model import configuration
 async def test_postgres_restart_transaction_rollback_and_idempotent_recovery():
     url = os.environ["TEST_APPROVAL_DATABASE_URL"]
     engine = create_async_engine(url)
-    assert engine.url.database == "day12_test", "仅允许使用明确命名的隔离测试库"
+    assert engine.url.database in {"day12_test", "day13_test"}, (
+        "仅允许使用明确命名的隔离测试库"
+    )
     factory = async_sessionmaker(engine, expire_on_commit=False)
     member = UserDO(
         id=uuid4(), username=str(uuid4()), password_hash="test", role=UserRole.MEMBER

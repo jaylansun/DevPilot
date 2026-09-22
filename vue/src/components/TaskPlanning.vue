@@ -2,7 +2,6 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from "vue";
 import { useRoute } from "vue-router";
 import {
-  ChatLineRound,
   ArrowDown,
   CircleCheck,
   Document,
@@ -29,6 +28,7 @@ const goal = ref("");
 const goalInput = ref<HTMLTextAreaElement | null>(null);
 const sending = ref(false);
 const approvalSending = ref(false);
+const workspaceTab = ref<"preview" | "approval">("preview");
 const formError = ref("");
 const formRequestId = ref("");
 const result = ref<PlanResultVO | null>(null);
@@ -41,7 +41,7 @@ let infoController: AbortController | undefined;
 let requestController: AbortController | undefined;
 
 async function loadInfo() {
-  if (sending.value) return;
+  if (sending.value || approvalSending.value) return;
   infoController?.abort();
   const controller = new AbortController();
   infoController = controller;
@@ -91,6 +91,7 @@ function cancelGeneration() {
 }
 
 async function generate() {
+  workspaceTab.value = "preview";
   if (sending.value) return;
   const text = goal.value.trim();
   if (!text || text.length > 2000) {
@@ -152,13 +153,13 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <section aria-label="项目任务规划" class="min-w-0 space-y-6">
+  <section aria-label="项目任务规划" class="work-panel">
     <div class="flex flex-wrap items-start justify-between gap-4">
       <div class="min-w-0">
-        <h2 class="m-0 text-xl font-semibold text-ink">把目标变成可执行的计划</h2>
-        <p class="mt-2 mb-0 text-sm leading-6 text-muted">结合项目资料与已有任务，梳理优先级、验收标准和依赖。</p>
+        <h2 class="m-0 text-lg font-semibold text-ink">任务规划</h2>
+        <p class="mt-1 mb-0 text-xs leading-6 text-muted">结合项目资料与已有任务，梳理优先级、验收标准和依赖。</p>
       </div>
-      <el-button :icon="Refresh" :loading="loading" :disabled="sending" class="ui-interactive min-h-11!" @click="loadInfo">刷新规划状态</el-button>
+      <el-button :icon="Refresh" :loading="loading" :disabled="sending || approvalSending" class="ui-interactive min-h-11!" @click="loadInfo">刷新规划状态</el-button>
     </div>
 
     <div class="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs leading-6 text-muted" role="status" aria-live="polite" aria-atomic="true">
@@ -188,54 +189,18 @@ onBeforeUnmount(() => {
       ，索引完成后点击“刷新规划状态”。
     </p>
 
-    <div class="grid min-w-0 items-start gap-7 board:grid-cols-[320px_minmax(0,1fr)] desktop:grid-cols-[380px_minmax(0,1fr)]">
-      <section aria-label="规划对话" class="min-w-0 board:sticky board:top-6">
-        <div class="flex items-center gap-3 pb-5">
-          <span class="grid size-9 place-items-center rounded-xl bg-brand/8 text-brand" aria-hidden="true"><el-icon><ChatLineRound /></el-icon></span>
-          <h3 class="m-0 text-sm font-semibold">与 DevPilot 一起规划</h3>
+    <div class="work-fill work-split">
+      <section aria-label="规划对话" class="work-scroll min-w-0 rounded-xl border border-line bg-surface p-4">
+        <h3 class="m-0 text-sm font-semibold">规划目标</h3>
+        <p class="mt-1 mb-3 text-xs leading-6 text-muted">明确本次范围，先预览草案，或直接生成并提交审批。</p>
+        <div v-if="canGenerate" class="mb-3 flex flex-wrap gap-2" aria-label="目标示例">
+          <button type="button" class="ui-interactive min-h-9 rounded-lg bg-raised px-2.5 text-xs text-muted hover:text-brand" @click="useExample('根据项目资料，规划下一阶段的开发任务，明确优先级和验收标准。')">规划下一阶段开发</button>
+          <button type="button" class="ui-interactive min-h-9 rounded-lg bg-raised px-2.5 text-xs text-muted hover:text-brand" @click="useExample('结合现有任务，梳理完成项目目标所缺少的工作，并说明任务之间的依赖。')">梳理遗漏与依赖</button>
         </div>
-
-        <div v-if="!submittedGoal" class="ui-enter min-w-0">
-          <h3 class="m-0 text-lg font-semibold leading-8">这次，你想推进什么？</h3>
-          <p class="mt-2 mb-0 text-sm leading-7 text-muted">告诉我目标、范围和关键约束，一起找到下一步。</p>
-          <div v-if="canGenerate" class="mt-4 flex flex-wrap gap-2" aria-label="目标示例">
-            <button
-              type="button"
-              class="ui-interactive min-h-11 cursor-pointer rounded-full bg-surface px-4 py-2 text-left text-sm leading-5 text-muted hover:bg-brand/8 hover:text-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
-              @click="useExample('根据项目资料，规划下一阶段的开发任务，明确优先级和验收标准。')"
-            >规划下一阶段开发</button>
-            <button
-              type="button"
-              class="ui-interactive min-h-11 cursor-pointer rounded-full bg-surface px-4 py-2 text-left text-sm leading-5 text-muted hover:bg-brand/8 hover:text-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
-              @click="useExample('结合现有任务，梳理完成项目目标所缺少的工作，并说明任务之间的依赖。')"
-            >梳理遗漏与依赖</button>
-          </div>
-        </div>
-        <div v-else :key="submittedGoal" class="ui-enter space-y-5">
-          <div aria-label="本次规划目标" class="ml-5 min-w-0">
-            <p class="mt-0 mb-2 text-right text-xs text-muted">你</p>
-            <p class="m-0 rounded-2xl rounded-tr-sm bg-brand/7 px-4 py-3 text-sm leading-7 whitespace-pre-wrap wrap-anywhere">{{ submittedGoal }}</p>
-          </div>
-          <div class="flex min-w-0 items-start gap-3">
-            <span class="grid size-8 shrink-0 place-items-center rounded-xl bg-surface text-brand" aria-hidden="true"><el-icon><Position /></el-icon></span>
-            <div class="min-w-0 flex-1" aria-live="polite" aria-atomic="true">
-              <p class="mt-1 mb-2 text-xs font-medium text-muted">DevPilot</p>
-              <div v-if="sending" class="ui-enter">
-                <p class="m-0 text-sm font-medium leading-7">正在准备任务草案……</p>
-                <p class="mt-1 mb-0 text-sm leading-7 text-muted">下方会实时显示读取与生成进度，草案校验完成后展示。你可以取消等待，目标会保留。</p>
-              </div>
-              <div v-else-if="result" class="ui-enter">
-                <p class="m-0 text-sm leading-7">已整理出 {{ result.proposal.tasks.length }} 项建议任务。先核对假设与风险，再查看任务详情。</p>
-                <p class="mt-1 mb-0 text-sm leading-7 text-muted">修改下方目标，可以重新生成一份草案。</p>
-              </div>
-              <p v-else class="m-0 text-sm leading-7 text-muted">本次尚未生成草案。目标已保留，准备好后可以再次生成。</p>
-            </div>
-          </div>
-        </div>
-
+        <p v-if="submittedGoal" aria-label="本次规划目标" class="mb-3 rounded-lg bg-raised p-3 text-xs leading-6 text-muted wrap-anywhere">本次目标：{{ submittedGoal }}</p>
         <RunTrace :events="trace" :running="sending" />
-        <form class="mt-6" @submit.prevent="generate">
-          <label for="planning-goal" class="mb-3 block text-sm font-medium text-ink">你想完成什么目标？</label>
+        <form class="mt-3" @submit.prevent="generate">
+          <label for="planning-goal" class="mb-2 block text-sm font-medium text-ink">你想完成什么目标？</label>
           <div class="ui-interactive rounded-2xl border border-line bg-surface p-4 shadow-sm shadow-ink/3 focus-within:border-brand focus-within:outline-2 focus-within:outline-offset-2 focus-within:outline-brand focus-within:shadow-brand/10">
             <textarea
               id="planning-goal"
@@ -243,7 +208,7 @@ onBeforeUnmount(() => {
               v-model="goal"
               rows="4"
               maxlength="2000"
-              class="block min-h-28 w-full resize-y border-0 bg-transparent p-0 text-base leading-7 text-ink placeholder:text-muted focus:outline-0 disabled:cursor-not-allowed disabled:opacity-50"
+              class="block min-h-24 w-full resize-y border-0 bg-transparent p-0 text-sm leading-6 text-ink placeholder:text-muted focus:outline-0 disabled:cursor-not-allowed disabled:opacity-50"
               placeholder="例如：完善下单流程，覆盖表单校验、库存检查和异常处理。"
               :disabled="sending || !canGenerate"
               :aria-invalid="formError === '请输入 1～2000 个字符的目标'"
@@ -268,7 +233,7 @@ onBeforeUnmount(() => {
             <el-button v-if="result" text class="ui-interactive min-h-11!" @click="clearDraft">清空草案</el-button>
           </div>
           <p id="planning-help" class="mt-3 mb-0 text-xs leading-6 text-muted">
-            此处生成临时预览，刷新或离开后移除。如需保存并交给审批人，请使用下方“生成并提交审批”，按当前目标重新生成并保存方案。
+            草案为临时预览。切换“提交与审批”，可按当前目标重新生成并保存。
           </p>
           <p v-if="info" class="mt-2 mb-0 text-xs leading-6 text-muted">
             <template v-if="info.mode === 'mock'">演示模式返回示例草案，不调用真实大模型。请结合项目实际核对内容。</template>
@@ -277,135 +242,145 @@ onBeforeUnmount(() => {
         </form>
       </section>
 
-      <section v-if="result" aria-label="任务方案预览" class="ui-enter min-w-0 rounded-2xl bg-surface px-6 py-7 shadow-sm shadow-ink/5 mobile:px-8 mobile:py-8">
-        <header class="mb-7 flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 class="m-0 text-2xl font-semibold leading-9">任务方案预览</h2>
-            <p class="mt-2 mb-0 text-sm text-muted">{{ result.proposal.tasks.length }} 项建议任务，按优先级逐步推进。</p>
-          </div>
-          <span class="rounded-full bg-raised px-3 py-1.5 text-xs text-muted">{{ result.mode === "mock" ? "演示草案" : "AI 草案" }} · 未保存</span>
-        </header>
-
-        <!-- 模型、任务和文档内容均通过插值展示为纯文本，不执行 HTML。 -->
-        <div class="mb-7">
-          <h3 class="mt-0 mb-3 text-sm font-medium text-muted">方案摘要</h3>
-          <p class="m-0 text-base leading-8 whitespace-pre-wrap wrap-anywhere">{{ result.proposal.summary }}</p>
+      <div class="flex min-h-0 min-w-0 flex-col gap-3">
+        <div class="work-view-switch self-start" aria-label="规划结果视图">
+          <button type="button" :aria-pressed="workspaceTab === 'preview'" @click="workspaceTab = 'preview'">草案预览</button>
+          <button type="button" :aria-pressed="workspaceTab === 'approval'" @click="workspaceTab = 'approval'">提交与审批</button>
         </div>
+        <div class="work-scroll min-h-0 flex-1">
+          <PlanningApprovals v-show="workspaceTab === 'approval'" :project-id="projectId" :goal="goal" :disabled="loading || sending || !info?.configured || !info?.ready_documents" @busy="approvalSending = $event" />
+          <div v-show="workspaceTab === 'preview'">
+            <section v-if="result" aria-label="任务方案预览" class="ui-enter min-w-0 rounded-xl border border-line bg-surface p-5">
+              <header class="mb-4 flex flex-wrap items-start justify-between gap-3">
+                <div>
+                  <h2 class="m-0 text-lg font-semibold leading-7">任务方案预览</h2>
+                  <p class="mt-2 mb-0 text-sm text-muted">{{ result.proposal.tasks.length }} 项建议任务，按优先级逐步推进。</p>
+                </div>
+                <span class="rounded-full bg-raised px-3 py-1.5 text-xs text-muted">{{ result.mode === "mock" ? "演示草案" : "AI 草案" }} · 未保存</span>
+              </header>
 
-        <div class="mb-8 grid min-w-0 gap-3">
-          <details class="group min-w-0 rounded-xl bg-raised/55 px-4" aria-label="规划假设">
-            <summary class="ui-interactive flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 py-3 text-sm font-medium [&::-webkit-details-marker]:hidden">
-              <span>规划假设 <span class="ml-2 font-normal text-muted">{{ result.proposal.assumptions.length }} 项</span></span>
-              <el-icon class="ui-interactive shrink-0 text-muted group-open:rotate-180" aria-hidden="true"><ArrowDown /></el-icon>
-            </summary>
-            <div class="ui-enter pb-4">
-              <ul v-if="result.proposal.assumptions.length" class="m-0 space-y-2 pl-5 text-base leading-8 text-muted">
-                <li v-for="(assumption, index) in result.proposal.assumptions" :key="index" class="whitespace-pre-wrap wrap-anywhere">{{ assumption }}</li>
-              </ul>
-              <p v-else class="m-0 text-base leading-8 text-muted">本次未列出额外假设，请自行核对。</p>
-            </div>
-          </details>
-          <details class="group min-w-0 rounded-xl bg-warning/6 px-4" aria-label="风险与待确认项" :open="result.proposal.risks.length > 0">
-            <summary class="ui-interactive flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 py-3 text-sm font-medium text-warning [&::-webkit-details-marker]:hidden">
-              <span>风险与待确认项 <span class="ml-2 font-normal">{{ result.proposal.risks.length }} 项</span></span>
-              <el-icon class="ui-interactive shrink-0 group-open:rotate-180" aria-hidden="true"><ArrowDown /></el-icon>
-            </summary>
-            <div class="ui-enter pb-4">
-              <ul v-if="result.proposal.risks.length" class="m-0 space-y-2 pl-5 text-base leading-8 text-muted">
-                <li v-for="(risk, index) in result.proposal.risks" :key="index" class="whitespace-pre-wrap wrap-anywhere">{{ risk }}</li>
-              </ul>
-              <p v-else class="m-0 text-base leading-8 text-muted">本次未列出风险，不代表项目没有风险。</p>
-            </div>
-          </details>
-        </div>
+              <!-- 模型、任务和文档内容均通过插值展示为纯文本，不执行 HTML。 -->
+              <div class="mb-4">
+                <h3 class="mt-0 mb-3 text-sm font-medium text-muted">方案摘要</h3>
+                <p class="m-0 text-sm leading-7 whitespace-pre-wrap wrap-anywhere">{{ result.proposal.summary }}</p>
+              </div>
 
-        <div class="mb-8">
-          <div class="mb-1 flex flex-wrap items-center justify-between gap-2">
-            <h3 class="m-0 text-lg font-semibold">建议任务</h3>
-            <span class="text-xs text-muted">P1 最高，P5 最低</span>
-          </div>
-          <div class="divide-y divide-line">
-            <article v-for="task in result.proposal.tasks" :key="task.draft_id" class="min-w-0 py-2" :aria-label="'任务 ' + task.draft_id + '：' + task.title">
-              <details class="group" :open="task.priority <= 2">
-                <summary class="ui-interactive -mx-2 flex min-h-16 cursor-pointer list-none items-start gap-3 rounded-xl px-2 py-4 hover:bg-canvas [&::-webkit-details-marker]:hidden">
-                  <span class="mt-1 text-xs font-medium text-muted">{{ task.draft_id }}</span>
-                  <h4 class="m-0 min-w-0 flex-1 text-base font-semibold leading-7 wrap-anywhere">{{ task.title }}</h4>
-                  <span class="mt-0.5 shrink-0 rounded-full px-2 py-1 text-xs"
-                    :class="task.priority === 1 ? 'bg-danger/8 text-danger' : task.priority === 2 ? 'bg-warning/8 text-warning' : 'bg-brand/8 text-brand'"
-                    :aria-label="'优先级 ' + task.priority">P{{ task.priority }}</span>
-                  <el-icon class="ui-interactive mt-1.5 shrink-0 text-muted group-open:rotate-180" aria-hidden="true"><ArrowDown /></el-icon>
-                </summary>
-                <div class="ui-enter pb-6">
-                  <p class="mt-0 mb-5 text-base leading-8 text-muted whitespace-pre-wrap wrap-anywhere">{{ task.description }}</p>
-                  <dl class="m-0 space-y-5 text-base leading-8">
-                    <div>
-                      <dt class="mb-2 flex items-center gap-2 text-sm font-semibold">
-                        <el-icon class="text-success" aria-hidden="true"><CircleCheck /></el-icon>验收标准
-                      </dt>
-                      <dd class="m-0 whitespace-pre-wrap wrap-anywhere">{{ task.acceptance_criteria }}</dd>
+              <div class="mb-4 grid min-w-0 gap-3">
+                <details class="group min-w-0 rounded-xl bg-raised/55 px-4" aria-label="规划假设">
+                  <summary class="ui-interactive flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 py-3 text-sm font-medium [&::-webkit-details-marker]:hidden">
+                    <span>规划假设 <span class="ml-2 font-normal text-muted">{{ result.proposal.assumptions.length }} 项</span></span>
+                    <el-icon class="ui-interactive shrink-0 text-muted group-open:rotate-180" aria-hidden="true"><ArrowDown /></el-icon>
+                  </summary>
+                  <div class="ui-enter pb-4">
+                    <ul v-if="result.proposal.assumptions.length" class="m-0 space-y-2 pl-5 text-sm leading-7 text-muted">
+                      <li v-for="(assumption, index) in result.proposal.assumptions" :key="index" class="whitespace-pre-wrap wrap-anywhere">{{ assumption }}</li>
+                    </ul>
+                    <p v-else class="m-0 text-sm leading-7 text-muted">本次未列出额外假设，请自行核对。</p>
+                  </div>
+                </details>
+                <details class="group min-w-0 rounded-xl bg-warning/6 px-4" aria-label="风险与待确认项" :open="result.proposal.risks.length > 0">
+                  <summary class="ui-interactive flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 py-3 text-sm font-medium text-warning [&::-webkit-details-marker]:hidden">
+                    <span>风险与待确认项 <span class="ml-2 font-normal">{{ result.proposal.risks.length }} 项</span></span>
+                    <el-icon class="ui-interactive shrink-0 group-open:rotate-180" aria-hidden="true"><ArrowDown /></el-icon>
+                  </summary>
+                  <div class="ui-enter pb-4">
+                    <ul v-if="result.proposal.risks.length" class="m-0 space-y-2 pl-5 text-sm leading-7 text-muted">
+                      <li v-for="(risk, index) in result.proposal.risks" :key="index" class="whitespace-pre-wrap wrap-anywhere">{{ risk }}</li>
+                    </ul>
+                    <p v-else class="m-0 text-sm leading-7 text-muted">本次未列出风险，不代表项目没有风险。</p>
+                  </div>
+                </details>
+              </div>
+
+              <div class="mb-4">
+                <div class="mb-1 flex flex-wrap items-center justify-between gap-2">
+                  <h3 class="m-0 text-lg font-semibold">建议任务</h3>
+                  <span class="text-xs text-muted">P1 最高，P5 最低</span>
+                </div>
+                <div class="divide-y divide-line">
+                  <article v-for="task in result.proposal.tasks" :key="task.draft_id" class="min-w-0 py-2" :aria-label="'任务 ' + task.draft_id + '：' + task.title">
+                    <details class="group">
+                      <summary class="ui-interactive -mx-2 flex min-h-12 cursor-pointer list-none items-start gap-3 rounded-xl px-2 py-2 hover:bg-canvas [&::-webkit-details-marker]:hidden">
+                        <span class="mt-1 text-xs font-medium text-muted">{{ task.draft_id }}</span>
+                        <h4 class="m-0 min-w-0 flex-1 text-base font-semibold leading-7 wrap-anywhere">{{ task.title }}</h4>
+                        <span class="mt-0.5 shrink-0 rounded-full px-2 py-1 text-xs"
+                          :class="task.priority === 1 ? 'bg-danger/8 text-danger' : task.priority === 2 ? 'bg-warning/8 text-warning' : 'bg-brand/8 text-brand'"
+                          :aria-label="'优先级 ' + task.priority">P{{ task.priority }}</span>
+                        <el-icon class="ui-interactive mt-1.5 shrink-0 text-muted group-open:rotate-180" aria-hidden="true"><ArrowDown /></el-icon>
+                      </summary>
+                      <div class="ui-enter pb-6">
+                        <p class="mt-0 mb-3 text-sm leading-6 text-muted whitespace-pre-wrap wrap-anywhere">{{ task.description }}</p>
+                        <dl class="m-0 space-y-3 text-sm leading-6">
+                          <div>
+                            <dt class="mb-2 flex items-center gap-2 text-sm font-semibold">
+                              <el-icon class="text-success" aria-hidden="true"><CircleCheck /></el-icon>验收标准
+                            </dt>
+                            <dd class="m-0 whitespace-pre-wrap wrap-anywhere">{{ task.acceptance_criteria }}</dd>
+                          </div>
+                          <div>
+                            <dt class="mb-1 text-sm font-semibold">前置依赖</dt>
+                            <dd class="m-0 text-muted">
+                              <ul v-if="task.dependencies.length" class="m-0 space-y-1 pl-5">
+                                <li v-for="id in task.dependencies" :key="id" class="wrap-anywhere">{{ dependencyLabel(id) }}</li>
+                              </ul>
+                              <span v-else>无前置依赖</span>
+                            </dd>
+                          </div>
+                          <div>
+                            <dt class="mb-1 text-sm font-semibold">参考来源</dt>
+                            <dd class="m-0">
+                              <span v-if="task.source_ids.length">
+                                <span v-for="id in task.source_ids" :key="id" class="mr-2 text-brand">[{{ id }}]</span>
+                                <span class="text-sm text-muted">在下方展开核对原文</span>
+                              </span>
+                              <span v-else class="text-muted">未引用文档，请人工核对</span>
+                            </dd>
+                          </div>
+                        </dl>
+                      </div>
+                    </details>
+                  </article>
+                </div>
+              </div>
+
+              <div class="border-t border-line pt-6" aria-label="规划参考来源">
+                <h3 class="mt-0 mb-3 flex items-center gap-2 text-sm font-semibold"><el-icon class="text-muted" aria-hidden="true"><Document /></el-icon>参考来源</h3>
+                <div v-if="result.sources.length" class="space-y-2">
+                  <details v-for="source in result.sources" :key="source.source_id" :aria-label="'来源 ' + source.source_id" class="rounded-xl bg-canvas px-4">
+                    <summary class="ui-interactive min-h-11 cursor-pointer py-3 text-sm leading-7 text-brand wrap-anywhere">[{{ source.source_id }}] {{ source.filename }} · 第 {{ source.chunk_index + 1 }} 个片段</summary>
+                    <div class="ui-enter pb-4">
+                      <p v-if="source.heading" class="mt-0 mb-2 text-sm leading-6 text-muted wrap-anywhere">{{ source.heading }}</p>
+                      <blockquote class="m-0 border-l-2 border-brand/25 pl-4 text-sm leading-7 text-muted whitespace-pre-wrap wrap-anywhere">{{ source.text }}</blockquote>
                     </div>
-                    <div>
-                      <dt class="mb-1 text-sm font-semibold">前置依赖</dt>
-                      <dd class="m-0 text-muted">
-                        <ul v-if="task.dependencies.length" class="m-0 space-y-1 pl-5">
-                          <li v-for="id in task.dependencies" :key="id" class="wrap-anywhere">{{ dependencyLabel(id) }}</li>
-                        </ul>
-                        <span v-else>无前置依赖</span>
-                      </dd>
-                    </div>
-                    <div>
-                      <dt class="mb-1 text-sm font-semibold">参考来源</dt>
-                      <dd class="m-0">
-                        <span v-if="task.source_ids.length">
-                          <span v-for="id in task.source_ids" :key="id" class="mr-2 text-brand">[{{ id }}]</span>
-                          <span class="text-sm text-muted">在下方展开核对原文</span>
-                        </span>
-                        <span v-else class="text-muted">未引用文档，请人工核对</span>
-                      </dd>
-                    </div>
-                  </dl>
+                  </details>
+                </div>
+                <p v-else class="m-0 text-sm leading-7 text-muted">本次未返回可引用的文档片段，请人工核对草案。</p>
+              </div>
+
+              <details class="mt-5 border-t border-line pt-2" aria-label="已完成只读工具调用">
+                <summary class="ui-interactive min-h-11 cursor-pointer py-3 text-sm font-medium text-muted">已完成只读工具调用</summary>
+                <div class="ui-enter">
+                  <ul class="m-0 space-y-2 pl-5 text-sm leading-7 text-muted">
+                    <li v-for="(call, index) in result.tool_calls" :key="index" class="wrap-anywhere">{{ toolLabel(call.name) }} · {{ call.status === "empty" ? "已完成，未找到内容" : "已完成" }} · {{ call.item_count }} 项</li>
+                  </ul>
+                  <p class="mt-3 mb-0 text-sm leading-7 text-muted">本次读取到任务看板共 {{ result.board_task_count }} 项任务。以上调用仅用于获取规划信息，草案尚未写入任务看板。</p>
                 </div>
               </details>
-            </article>
+            </section>
+
+            <div v-else :key="sending ? 'waiting' : 'ready'" aria-label="任务草案工作区" class="ui-enter min-w-0 rounded-2xl bg-surface border border-line px-5 py-6">
+              <div class="mb-4 grid size-12 place-items-center rounded-xl bg-raised text-xl text-brand" aria-hidden="true"><el-icon><List /></el-icon></div>
+              <h3 class="mt-0 mb-3 text-2xl font-semibold leading-9 text-ink">{{ sending ? "正在整理你的规划" : "任务计划将在这里展开" }}</h3>
+              <p class="m-0 max-w-prose text-sm leading-7 text-muted">{{ sending ? "收到完整结果后，这里会展示方案摘要、任务清单和可核对的依据。" : "从一个明确目标开始，把想做的事整理成可以逐步完成的任务。" }}</p>
+              <dl class="mt-8 mb-0 space-y-5 text-sm leading-7">
+                <div class="flex items-baseline justify-between gap-3"><dt class="font-medium text-ink">方案依据</dt><dd class="m-0 text-right text-muted">摘要、假设与风险</dd></div>
+                <div class="flex items-baseline justify-between gap-3"><dt class="font-medium text-ink">执行路径</dt><dd class="m-0 text-right text-muted">任务、验收与依赖</dd></div>
+                <div class="flex items-baseline justify-between gap-3"><dt class="font-medium text-ink">核对来源</dt><dd class="m-0 text-right text-muted">文档片段与工具结果</dd></div>
+              </dl>
+            </div>
           </div>
         </div>
-
-        <div class="border-t border-line pt-6" aria-label="规划参考来源">
-          <h3 class="mt-0 mb-3 flex items-center gap-2 text-sm font-semibold"><el-icon class="text-muted" aria-hidden="true"><Document /></el-icon>参考来源</h3>
-          <div v-if="result.sources.length" class="space-y-2">
-            <details v-for="source in result.sources" :key="source.source_id" :aria-label="'来源 ' + source.source_id" class="rounded-xl bg-canvas px-4">
-              <summary class="ui-interactive min-h-11 cursor-pointer py-3 text-sm leading-7 text-brand wrap-anywhere">[{{ source.source_id }}] {{ source.filename }} · 第 {{ source.chunk_index + 1 }} 个片段</summary>
-              <div class="ui-enter pb-4">
-                <p v-if="source.heading" class="mt-0 mb-2 text-sm leading-6 text-muted wrap-anywhere">{{ source.heading }}</p>
-                <blockquote class="m-0 border-l-2 border-brand/25 pl-4 text-base leading-8 text-muted whitespace-pre-wrap wrap-anywhere">{{ source.text }}</blockquote>
-              </div>
-            </details>
-          </div>
-          <p v-else class="m-0 text-base leading-8 text-muted">本次未返回可引用的文档片段，请人工核对草案。</p>
-        </div>
-
-        <details class="mt-5 border-t border-line pt-2" aria-label="已完成只读工具调用">
-          <summary class="ui-interactive min-h-11 cursor-pointer py-3 text-sm font-medium text-muted">已完成只读工具调用</summary>
-          <div class="ui-enter">
-            <ul class="m-0 space-y-2 pl-5 text-sm leading-7 text-muted">
-              <li v-for="(call, index) in result.tool_calls" :key="index" class="wrap-anywhere">{{ toolLabel(call.name) }} · {{ call.status === "empty" ? "已完成，未找到内容" : "已完成" }} · {{ call.item_count }} 项</li>
-            </ul>
-            <p class="mt-3 mb-0 text-sm leading-7 text-muted">本次读取到任务看板共 {{ result.board_task_count }} 项任务。以上调用仅用于获取规划信息，草案尚未写入任务看板。</p>
-          </div>
-        </details>
-      </section>
-
-      <div v-else :key="sending ? 'waiting' : 'ready'" aria-label="任务草案工作区" class="ui-enter min-w-0 rounded-2xl bg-surface px-6 py-8 shadow-sm shadow-ink/5 mobile:px-8 board:min-h-[480px]">
-        <div class="mb-8 grid size-12 place-items-center rounded-xl bg-raised text-xl text-brand" aria-hidden="true"><el-icon><List /></el-icon></div>
-        <h3 class="mt-0 mb-3 text-2xl font-semibold leading-9 text-ink">{{ sending ? "正在整理你的规划" : "任务计划将在这里展开" }}</h3>
-        <p class="m-0 max-w-prose text-base leading-8 text-muted">{{ sending ? "收到完整结果后，这里会展示方案摘要、任务清单和可核对的依据。" : "从一个明确目标开始，把想做的事整理成可以逐步完成的任务。" }}</p>
-        <dl class="mt-8 mb-0 space-y-5 text-sm leading-7">
-          <div class="flex items-baseline justify-between gap-3"><dt class="font-medium text-ink">方案依据</dt><dd class="m-0 text-right text-muted">摘要、假设与风险</dd></div>
-          <div class="flex items-baseline justify-between gap-3"><dt class="font-medium text-ink">执行路径</dt><dd class="m-0 text-right text-muted">任务、验收与依赖</dd></div>
-          <div class="flex items-baseline justify-between gap-3"><dt class="font-medium text-ink">核对来源</dt><dd class="m-0 text-right text-muted">文档片段与工具结果</dd></div>
-        </dl>
       </div>
     </div>
-    <PlanningApprovals :project-id="projectId" :goal="goal" :disabled="loading || sending || !info?.configured || !info?.ready_documents" @busy="approvalSending = $event" />
   </section>
 </template>

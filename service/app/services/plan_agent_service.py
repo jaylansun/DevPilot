@@ -11,6 +11,7 @@ from langchain.agents.middleware import (
     ToolCallLimitMiddleware,
     ToolRetryMiddleware,
 )
+from langchain.agents.middleware.model_call_limit import ModelCallLimitExceededError
 from langchain.agents.structured_output import ToolStrategy
 from langchain_core.messages import AIMessage, HumanMessage, SystemMessage, ToolMessage
 from langchain_openai import ChatOpenAI
@@ -18,12 +19,15 @@ from langchain_openai import ChatOpenAI
 from app.config import Settings
 from app.errors import ApiError
 from app.schemas.plan_vo import PlanProposalVO, TaskDraftVO, normalize_task_title
+from app.services.plan_validation import plan_repair_feedback
 from app.services.run_events import trace
 from app.tools.planning_tools import PLANNING_TOOLS, PlanToolContext
 
 MAX_DOCUMENT_SEARCHES = 3
 # 即使供应商每轮只调用一个工具，也能完成三次检索、一次看板读取及最终输出。
 MAX_MODEL_CALLS = MAX_DOCUMENT_SEARCHES + 2
+# 只给结构化校验失败额外一次纠正；读取预算和总时限保持不变。
+MAX_MODEL_CALLS_WITH_REPAIR = MAX_MODEL_CALLS + 1
 MAX_TOOL_CALLS = 6
 # 图步数还包含调用计数等中间件节点，不能与模型调用次数等同。
 PLAN_RECURSION_LIMIT = 32
@@ -36,7 +40,12 @@ PLAN_RULES = """你是项目任务规划助手，只提出草案，不执行任�
 用户未指定数量时，优先给出下一阶段最重要的 3 至 5 项任务；目标很小时可少于三项，不为凑数拆分。
 摘要控制在 200 字内，每项说明和验收标准分别控制在 100 字内，假设和风险各不超过三条。
 任务标题不能与已存在任务重复。draft_id 使用唯一的 T1 至 T12；dependencies 只能引用本方案内
-其他任务的 draft_id，不能循环依赖。缺少直接文档依据的设计决定必须标为假设。
+其他任务的 draft_id，不能循环依赖，不能填现有看板任务的数据库ID或标题。
+每份新方案从 T1 开始编号，不延续现有看板任务的编号。若依赖现有看板任务，在说明中写明，
+不要为已有任务虚设 T 编号。提交前确认每个依赖编号确实出现在本次 tasks 的 draft_id 集合中。
+priority 必须是 1 至 5 的 JSON 整数；source_ids 是整数数组；dependencies 是 T 编号数组。
+acceptance_criteria 使用一个字符串，不要返回数组；没有依赖或引用时使用 []，不要填 null。
+缺少直接文档依据的设计决定必须标为假设。
 source_ids 只能使用 search_documents 实际返回的引用编号，至少一个任务应引用实际资料。
 不得返回用户ID、项目ID、数据库任务ID、审批状态、SQL、写入指令或声称草案已保存。
 只用文本，不使用 HTML。结构化结果通过 PlanProposalVO 返回。
@@ -66,17 +75,34 @@ class PlanningProgressMiddleware(AgentMiddleware):
     """按已完成的读取收窄工具，避免用完模型轮次后才准备提交草案。"""
 
     async def awrap_model_call(self, request: ModelRequest, handler):
+        # ToolStrategy 校验失败会附加同名工具反馈；成功输出后图已结束，不再进入此处。
+        repairing = any(
+            isinstance(message, ToolMessage) and message.name == "PlanProposalVO"
+            for message in request.messages
+        )
+        if (
+            not repairing
+            and request.state.get("run_model_call_count", 0) >= MAX_MODEL_CALLS
+        ):
+            raise ModelCallLimitExceededError(
+                thread_count=request.state.get("thread_model_call_count", 0),
+                run_count=request.state.get("run_model_call_count", 0),
+                thread_limit=None,
+                run_limit=MAX_MODEL_CALLS,
+            )
         completed = Counter(
             message.name
             for message in request.messages
-            if isinstance(message, ToolMessage) and message.status == "success"
+            if isinstance(message, ToolMessage)
+            and message.status == "success"
+            and message.name in ("search_documents", "read_task_board")
         )
         missing = {
             name
             for name in ("search_documents", "read_task_board")
             if not completed[name]
         }
-        if missing:
+        if missing and not repairing:
             # 必要读取结束前不提供结果工具，已经读取过的工具也不再占用这一阶段。
             return await handler(
                 request.override(
@@ -91,16 +117,29 @@ class PlanningProgressMiddleware(AgentMiddleware):
             and sum(completed.values()) < MAX_TOOL_CALLS - 1
             and request.state.get("run_model_call_count", 0) < MAX_MODEL_CALLS - 1
         )
-        if not can_search:
+        if repairing or not can_search:
             # 兼容会沿用历史工具调用的供应商：最终轮只传实际读取结果，移除旧 AI 调用指令。
             evidence = [
                 {"role": message.type, "name": message.name, "content": message.content}
                 for message in request.messages
                 if isinstance(message, (HumanMessage, ToolMessage))
             ]
+            if repairing:
+                evidence.extend(
+                    {"previous_invalid_proposal": call["args"]}
+                    for message in request.messages
+                    if isinstance(message, AIMessage)
+                    for call in message.tool_calls
+                    if call["name"] == "PlanProposalVO"
+                )
             response = await handler(
                 request.override(
                     tools=[],
+                    # 纠正轮校验再失败就终止，不无限重试，也不重新读取资料。
+                    response_format=ToolStrategy(
+                        PlanProposalVO,
+                        handle_errors=False if repairing else plan_repair_feedback,
+                    ),
                     system_message=SystemMessage(content=FINAL_PLAN_PROMPT),
                     messages=[
                         HumanMessage(content=json.dumps(evidence, ensure_ascii=False))
@@ -135,9 +174,13 @@ def build_planning_agent(model):
         # 工具读取器只在本次请求内存在，不能恢复旧消息却丢失其来源/看板上下文。
         # 外层 ApprovalGraph 持久保存校验后的完整方案；失败的生成节点从头读取。
         checkpointer=False,
-        response_format=ToolStrategy(PlanProposalVO, handle_errors=False),
+        response_format=ToolStrategy(
+            PlanProposalVO, handle_errors=plan_repair_feedback
+        ),
         middleware=[
-            ModelCallLimitMiddleware(run_limit=MAX_MODEL_CALLS, exit_behavior="error"),
+            ModelCallLimitMiddleware(
+                run_limit=MAX_MODEL_CALLS_WITH_REPAIR, exit_behavior="error"
+            ),
             # 六次总额度包含结构化输出；成功返回方案需为最后一次输出预留额度。
             ToolCallLimitMiddleware(run_limit=MAX_TOOL_CALLS, exit_behavior="error"),
             PlanningProgressMiddleware(),

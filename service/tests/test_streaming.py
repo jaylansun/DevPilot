@@ -544,3 +544,28 @@ async def test_asgi_disconnect_cancels_model_and_releases_service_slot(
     await asyncio.wait_for(app(scope, receive, send), 3)
     assert cancelled.is_set() and disconnected.is_set()
     assert rag._slots._value == 1
+
+
+async def test_plan_validation_error_logs_request_id_and_safe_constraints(caplog):
+    from app.schemas.plan_vo import PlanProposalVO
+    from app.services.plan_validation import plan_error_message, plan_validation_issues
+    from pydantic import ValidationError
+    from test_plan_schema import proposal_data
+
+    data = proposal_data()
+    data["tasks"][0]["priority"] = "private-model-input-never-log"
+    try:
+        PlanProposalVO.model_validate(data)
+    except ValidationError as exc:
+        issues = plan_validation_issues(exc)
+
+    async def run(_events):
+        raise ApiError(502, "invalid_plan", plan_error_message(issues), details=issues)
+
+    events = await collect(run, kind="planning", request_id="planning-validation-check")
+    assert events[-1]["type"] == "error"
+    assert "优先级" in events[-1]["error"]["message"]
+    assert (
+        "planning-validation-check" in caplog.text and "tasks.0.priority" in caplog.text
+    )
+    assert "private-model-input-never-log" not in caplog.text + json.dumps(events)

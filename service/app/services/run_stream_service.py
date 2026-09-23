@@ -54,6 +54,13 @@ class StreamRunner:
         except Exception as exc:  # noqa: BLE001 -- 流式边界转换为安全错误事件。
             if isinstance(exc, ApiError):
                 status, code, message = exc.status_code, exc.code, exc.message
+                if code == "invalid_plan":
+                    logger.warning(
+                        "任务方案校验失败；请求 ID=%s；错误码=%s；字段约束=%s",
+                        self._channel.request_id,
+                        code,
+                        exc.details,
+                    )
             elif isinstance(exc, TimeoutError):
                 status, code, message = 504, "stream_timeout", "处理超时，请重试"
             else:

@@ -292,3 +292,24 @@ async def test_cancel_and_busy_are_bounded(planning_context):
     with pytest.raises(asyncio.CancelledError):
         await task
     assert service._slots._value == 1
+
+
+async def test_invalid_plan_error_explains_constraint_without_logging_model_input(
+    planning_context, caplog
+):
+    factory, owner, project, _doc, index = planning_context
+    data = proposal_data()
+    data["tasks"][0]["priority"] = "private-model-output-never-log"
+    try:
+        PlanProposalVO.model_validate(data)
+    except ValueError as failure:
+        agent = AsyncMock()
+        agent.generate.side_effect = failure
+    service = PlanService(settings(), index, factory, agent)
+    with pytest.raises(ApiError) as error:
+        await service.create(owner, project, "目标")
+    assert error.value.code == "invalid_plan"
+    assert "优先级" in error.value.message and "整数" in error.value.message
+    assert error.value.details[0]["field"] == "tasks.0.priority"
+    assert "private-model-output-never-log" not in error.value.message + caplog.text
+    assert service._slots._value == 1

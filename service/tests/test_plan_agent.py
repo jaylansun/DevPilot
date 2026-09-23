@@ -2,6 +2,13 @@ from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
 import pytest
+from app.errors import ApiError
+from app.services.plan_agent_service import (
+    MAX_MODEL_CALLS,
+    PLAN_RECURSION_LIMIT,
+    build_planning_agent,
+)
+from app.tools.planning_tools import PlanToolContext
 from langchain.agents.middleware.model_call_limit import ModelCallLimitExceededError
 from langchain.agents.middleware.tool_call_limit import ToolCallLimitExceededError
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -11,14 +18,6 @@ from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import Field
 from test_plan_schema import proposal_data
 
-from app.errors import ApiError
-from app.services.plan_agent_service import (
-    MAX_MODEL_CALLS,
-    PLAN_RECURSION_LIMIT,
-    build_planning_agent,
-)
-from app.tools.planning_tools import PlanToolContext
-
 
 class ScriptedPlanningModel(BaseChatModel):
     """真实 Agent/ToolRuntime 集成测试中的离线模型，不发送网络请求。"""
@@ -27,6 +26,7 @@ class ScriptedPlanningModel(BaseChatModel):
     calls: int = 0
     bound: list = Field(default_factory=list)
     bound_history: list[list[str]] = Field(default_factory=list)
+    message_history: list[list] = Field(default_factory=list)
 
     @property
     def _llm_type(self):
@@ -40,6 +40,7 @@ class ScriptedPlanningModel(BaseChatModel):
         return self
 
     def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+        self.message_history.append(list(messages))
         message = self.replies[min(self.calls, len(self.replies) - 1)].model_copy(
             deep=True
         )
@@ -104,10 +105,14 @@ class SearchFirstPlanningModel(ScriptedPlanningModel):
         elif "read_task_board" in names:
             reply = AIMessage(
                 content="",
-                tool_calls=[{
-                    "name": "read_task_board", "args": {},
-                    "id": f"board-{self.calls}", "type": "tool_call",
-                }],
+                tool_calls=[
+                    {
+                        "name": "read_task_board",
+                        "args": {},
+                        "id": f"board-{self.calls}",
+                        "type": "tool_call",
+                    }
+                ],
             )
         else:
             assert names == ["PlanProposalVO"]
@@ -142,7 +147,7 @@ async def test_serial_reads_reserve_final_model_call_and_stop_searching():
     final_context = model.final_messages[-1].content
     assert "规划下一阶段的开发任务" in final_context
     assert "库存不足不允许下单" in final_context
-    assert "read_task_board" in final_context and 'total' in final_context
+    assert "read_task_board" in final_context and "total" in final_context
 
 
 async def test_shared_agent_does_not_carry_read_budget_between_requests():
@@ -252,7 +257,9 @@ async def test_final_stage_rejects_model_that_keeps_requesting_read_tools():
 
 async def test_tool_batch_over_hard_limit_is_rejected_before_execution():
     context = tool_context()
-    calls = [tool_reply(number, include_board=False).tool_calls[0] for number in range(7)]
+    calls = [
+        tool_reply(number, include_board=False).tool_calls[0] for number in range(7)
+    ]
     model = ScriptedPlanningModel(replies=[AIMessage(content="", tool_calls=calls)])
     with pytest.raises(ToolCallLimitExceededError):
         await build_planning_agent(model).ainvoke(
@@ -314,4 +321,71 @@ async def test_invalid_structured_output_does_not_retry_forever():
             {"messages": [{"role": "user", "content": "订单"}]}, context=context
         )
     assert "structured" in type(error.value).__name__.lower()
-    assert model.calls == 2
+    assert model.calls == 3
+    assert model.bound_history[-1] == ["PlanProposalVO"]
+    context.reader.search_documents.assert_awaited_once()
+    context.reader.read_task_board.assert_awaited_once()
+
+
+@pytest.mark.parametrize("failure", ["priority", "cycle", "multiple", "combined"])
+async def test_invalid_proposal_gets_one_correction_without_repeating_reads(failure):
+    context = tool_context()
+    data = proposal_data()
+    if failure in ("priority", "combined"):
+        data["tasks"][0]["priority"] = "P1"
+        if failure == "combined":
+            data["tasks"][0]["dependencies"] = ["T9"]
+    elif failure == "cycle":
+        data["tasks"][0]["dependencies"] = ["T2"]
+    invalid = final_reply(data)
+    if failure == "multiple":
+        invalid.tool_calls.append({**invalid.tool_calls[0], "id": "plan-2"})
+    model = ScriptedPlanningModel(replies=[tool_reply(), invalid, final_reply()])
+    agent = build_planning_agent(model)
+    result = await agent.ainvoke(
+        {"messages": [{"role": "user", "content": "规划订单"}]},
+        context=context,
+        config={"recursion_limit": PLAN_RECURSION_LIMIT},
+    )
+    assert result["structured_response"].model_dump() == proposal_data()
+    assert model.calls == 3
+    assert model.bound_history[-1] == ["PlanProposalVO"]
+    assert "方案未通过校验" in model.message_history[-1][-1].content
+    if failure == "combined":
+        assert (
+            "tasks.0.dependencies 引用了不存在的 T9"
+            in model.message_history[-1][-1].content
+        )
+    context.reader.search_documents.assert_awaited_once()
+    context.reader.read_task_board.assert_awaited_once()
+
+
+class InvalidFinalSerialModel(SearchFirstPlanningModel):
+    final_attempts: int = 0
+
+    def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+        response = super()._generate(messages, stop, run_manager, **kwargs)
+        if self.bound_history[-1] == ["PlanProposalVO"]:
+            self.final_attempts += 1
+            if self.final_attempts % 2:
+                data = proposal_data()
+                data["tasks"][0]["priority"] = "P1"
+                response.generations[0].message = final_reply(data)
+        return response
+
+
+async def test_last_normal_call_keeps_one_correction_and_shared_agent_resets_budget():
+    model = InvalidFinalSerialModel(replies=[])
+    agent = build_planning_agent(model)
+    for _ in range(2):
+        context = tool_context()
+        result = await agent.ainvoke(
+            {"messages": [{"role": "user", "content": "规划订单"}]},
+            context=context,
+            config={"recursion_limit": PLAN_RECURSION_LIMIT},
+        )
+        assert result["structured_response"].model_dump() == proposal_data()
+        assert context.reader.search_documents.await_count == 3
+        context.reader.read_task_board.assert_awaited_once()
+        assert model.bound_history[-2:] == [["PlanProposalVO"], ["PlanProposalVO"]]
+    assert model.calls == 12

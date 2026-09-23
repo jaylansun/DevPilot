@@ -22,6 +22,7 @@ from app.schemas.plan_vo import (
     normalize_task_title,
 )
 from app.services.document_service import require_document_project
+from app.services.plan_validation import plan_error_message, plan_validation_issues
 from app.services.planning_read_service import PlanningReadService
 from app.services.run_events import NOOP_EVENTS, EventPublisher, trace
 from app.services.run_limits import PLANNING_TIMEOUT_SECONDS
@@ -169,8 +170,10 @@ class PlanService:
                 "本次规划未能在限定步骤内完成，请重试或缩小目标范围",
             ) from exc
         except (ValidationError, StructuredOutputError) as exc:
+            issues = plan_validation_issues(exc)
+            logger.warning("任务方案校验失败；字段约束=%s", issues)
             raise ApiError(
-                502, "invalid_plan", "模型返回的任务方案不符合格式或依赖规则，请重试"
+                502, "invalid_plan", plan_error_message(issues), details=issues
             ) from exc
         except Exception as exc:
             logger.warning("任务规划失败；异常类型=%s", type(exc).__name__)

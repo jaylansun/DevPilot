@@ -20,13 +20,13 @@ async function login(page: Page, username: string) {
 test("真实 API：成员提交、刷新保留、审批人修改批准、任务进入看板", async ({ page, browser }) => {
   await login(page, "day12_member");
   await page.goto(`/projects/${project}?tab=planning`);
-  await page.getByRole("button", { name: "提交与审批", exact: true }).click();
   await page.getByLabel("你想完成什么目标？").fill("完善订单流程并核对重复提交规则");
-  await page.getByRole("button", { name: "生成并提交审批", exact: true }).click();
+  await page.getByRole("button", { name: "生成任务草案", exact: true }).click();
+  await page.getByRole("button", { name: "提交这一版", exact: true }).click();
   const records = page.getByRole("region", { name: "持久规划与审批" });
   await expect(records.getByRole("status")).toHaveText("等待审批");
   await page.reload();
-  await page.getByRole("button", { name: "提交与审批", exact: true }).click();
+  await page.getByRole("button", { name: "审批记录", exact: true }).click();
   await expect(records.getByText("等待审批", { exact: true })).toBeVisible();
   await records.getByRole("button", { name: "查看方案" }).click();
   await expect(records.getByRole("region", { name: "审批方案详情" })).toBeVisible();
@@ -46,7 +46,7 @@ test("真实 API：成员提交、刷新保留、审批人修改批准、任务�
     await expect(reviewer.getByText(/已创建 \d+ 项任务/)).toBeVisible();
   } finally { await reviewer.close(); }
   await page.reload();
-  await page.getByRole("button", { name: "提交与审批", exact: true }).click();
+  await page.getByRole("button", { name: "审批记录", exact: true }).click();
   await expect(records.getByText("已加入看板", { exact: true })).toBeVisible();
   await page.getByRole("navigation", { name: "项目功能" }).getByRole("link", { name: "任务看板", exact: true }).click();
   await expect(page.getByText("审批确认的订单校验任务", { exact: true })).toBeVisible();

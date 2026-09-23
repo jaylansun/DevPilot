@@ -1,4 +1,4 @@
-"""持久审批 Graph：先生成并保存方案，再暂停；人工恢复后才允许写入。"""
+"""持久审批 Graph：复用已保存草案或生成方案；人工批准后才写入任务。"""
 
 from dataclasses import dataclass
 from typing import TypedDict
@@ -36,7 +36,11 @@ class ApprovalGraph:
         builder.add_node("submit_approval", self.submit_approval)
         builder.add_node("await_approval", self.await_approval)
         builder.add_node("apply_decision", self.apply_decision)
-        builder.add_edge(START, "generate_plan")
+        builder.add_conditional_edges(
+            START,
+            lambda state: "submit_approval" if state.get("plan") else "generate_plan",
+            {"submit_approval": "submit_approval", "generate_plan": "generate_plan"},
+        )
         builder.add_edge("generate_plan", "submit_approval")
         builder.add_edge("submit_approval", "await_approval")
         builder.add_edge("await_approval", "apply_decision")

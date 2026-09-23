@@ -6,6 +6,7 @@ from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
 from app.schemas.approval_vo import ApprovalVO
 from app.schemas.error_vo import ErrorDetailVO
+from app.schemas.plan_draft_vo import PlanDraftVO
 from app.schemas.plan_vo import PlanResultVO
 from app.schemas.rag_vo import RagAnswerVO
 from app.schemas.workflow_vo import WorkflowResultVO
@@ -70,6 +71,12 @@ class WorkflowFinal(EventBase):
     result: WorkflowResultVO
 
 
+class DraftFinal(EventBase):
+    type: Literal["final"] = "final"
+    kind: Literal["draft"] = "draft"
+    result: PlanDraftVO
+
+
 class ApprovalRequiredEvent(EventBase):
     type: Literal["approval_required"] = "approval_required"
     approval: ApprovalVO
@@ -82,7 +89,8 @@ class ApprovalFinal(EventBase):
 
 
 FinalEvent = Annotated[
-    KnowledgeFinal | PlanningFinal | WorkflowFinal | ApprovalFinal, Field(discriminator="kind")
+    KnowledgeFinal | PlanningFinal | WorkflowFinal | ApprovalFinal | DraftFinal,
+    Field(discriminator="kind"),
 ]
 
 
@@ -93,7 +101,12 @@ class ErrorEvent(EventBase):
 
 
 StreamEvent = Annotated[
-    TokenEvent | NodeEvent | ToolEvent | ApprovalRequiredEvent | FinalEvent | ErrorEvent,
+    TokenEvent
+    | NodeEvent
+    | ToolEvent
+    | ApprovalRequiredEvent
+    | FinalEvent
+    | ErrorEvent,
     Field(discriminator="type"),
 ]
 stream_event_adapter = TypeAdapter(StreamEvent)

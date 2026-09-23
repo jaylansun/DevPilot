@@ -9,9 +9,12 @@ import {
   Position,
   Refresh,
 } from "@element-plus/icons-vue";
-import { getPlanningInfo, proposeTasks } from "@/api/planning_api";
+import { getPlanningInfo } from "@/api/planning_api";
+import { generateDraft } from "@/api/plan_draft_api";
+import PlanDraftList from "@/components/PlanDraftList.vue";
+import PlanDraftActions from "@/components/PlanDraftActions.vue";
 import { ApiError, errorMessage } from "@/api/http_client";
-import type { PlanInfoVO, PlanResultVO, ToolCallVO } from "@/types/api";
+import type { ApprovalVO, PlanDraftVO, PlanInfoVO, ToolCallVO } from "@/types/api";
 
 import PlanningApprovals from "@/components/PlanningApprovals.vue";
 import RunTrace from "@/components/RunTrace.vue";
@@ -28,20 +31,24 @@ const goal = ref("");
 const goalInput = ref<HTMLTextAreaElement | null>(null);
 const sending = ref(false);
 const approvalSending = ref(false);
+const draftBusy = ref(false);
 const workspaceTab = ref<"preview" | "approval">("preview");
 const formError = ref("");
 const formRequestId = ref("");
-const result = ref<PlanResultVO | null>(null);
+const selectedDraft = ref<PlanDraftVO | null>(null);
+const result = computed(() => selectedDraft.value?.plan ?? null);
+const draftEditing = ref(false), draftsRefresh = ref(0), approvalsRefresh = ref(0);
+const submittedApproval = ref<ApprovalVO | null>(null);
 const submittedGoal = ref("");
 const canGenerate = computed(
-  () => !approvalSending.value && !loading.value && info.value?.configured && !!info.value.ready_documents,
+  () => !draftEditing.value && !approvalSending.value && !draftBusy.value && !loading.value && info.value?.configured && !!info.value.ready_documents,
 );
 let active = true;
 let infoController: AbortController | undefined;
 let requestController: AbortController | undefined;
 
 async function loadInfo() {
-  if (sending.value || approvalSending.value) return;
+  if (sending.value || approvalSending.value || draftBusy.value) return;
   infoController?.abort();
   const controller = new AbortController();
   infoController = controller;
@@ -63,8 +70,9 @@ async function loadInfo() {
 }
 
 function clearDraft() {
+  if (draftEditing.value || approvalSending.value || draftBusy.value) return;
   trace.value = [];
-  result.value = null;
+  selectedDraft.value = null;
   submittedGoal.value = "";
   formError.value = "";
   formRequestId.value = "";
@@ -85,7 +93,7 @@ function cancelGeneration() {
   requestController = undefined;
   controller.abort();
   sending.value = false;
-  formError.value = "已取消生成等待；目标已保留，可重新生成。服务端可能仍在结束当前计算。";
+  formError.value = "已取消生成等待；目标已保留。请先刷新草案记录，确认是否已保存。";
   formRequestId.value = "";
   void nextTick(() => goalInput.value?.focus({ preventScroll: true }));
 }
@@ -106,7 +114,7 @@ async function generate() {
   const controller = new AbortController();
   requestController = controller;
   try {
-    const response = await proposeTasks(
+    const response = await generateDraft(
       props.projectId,
       { goal: text },
       controller.signal,
@@ -117,12 +125,13 @@ async function generate() {
     );
     if (!active || controller.signal.aborted || requestController !== controller)
       return;
-    result.value = response;
+    selectedDraft.value = response;
+    draftsRefresh.value++;
   } catch (reason) {
     if (!active || requestController !== controller) return;
     formError.value =
       reason instanceof ApiError && reason.code === "cancelled"
-        ? "已取消生成等待；目标已保留，可重新生成。服务端可能仍在结束当前计算。"
+        ? "已取消生成等待；目标已保留。请先刷新草案记录，确认是否已保存。"
         : errorMessage(reason);
     formRequestId.value = reason instanceof ApiError ? reason.requestId ?? "" : "";
   } finally {
@@ -131,6 +140,25 @@ async function generate() {
       requestController = undefined;
     }
   }
+}
+
+function openDraft(draft: PlanDraftVO) {
+  if (sending.value || approvalSending.value || draftBusy.value || draftEditing.value) return;
+  selectedDraft.value = draft;
+  goal.value = draft.goal;
+  submittedGoal.value = draft.goal;
+  workspaceTab.value = "preview";
+  formError.value = "";
+  trace.value = [];
+}
+function updateDraft(draft: PlanDraftVO) {
+  selectedDraft.value = draft;
+  draftsRefresh.value++;
+}
+function submitted(approval: ApprovalVO) {
+  submittedApproval.value = approval;
+  approvalsRefresh.value++;
+  workspaceTab.value = "approval";
 }
 
 function toolLabel(name: ToolCallVO["name"]) {
@@ -159,7 +187,7 @@ onBeforeUnmount(() => {
         <h2 class="m-0 text-lg font-semibold text-ink">任务规划</h2>
         <p class="mt-1 mb-0 text-xs leading-6 text-muted">结合项目资料与已有任务，梳理优先级、验收标准和依赖。</p>
       </div>
-      <el-button :icon="Refresh" :loading="loading" :disabled="sending || approvalSending" class="ui-interactive min-h-11!" @click="loadInfo">刷新规划状态</el-button>
+      <el-button :icon="Refresh" :loading="loading" :disabled="sending || approvalSending || draftBusy" class="ui-interactive min-h-11!" @click="loadInfo">刷新规划状态</el-button>
     </div>
 
     <div class="flex flex-wrap items-center gap-x-5 gap-y-2 text-xs leading-6 text-muted" role="status" aria-live="polite" aria-atomic="true">
@@ -192,7 +220,7 @@ onBeforeUnmount(() => {
     <div class="work-fill work-split">
       <section aria-label="规划对话" class="work-scroll min-w-0 rounded-xl border border-line bg-surface p-4">
         <h3 class="m-0 text-sm font-semibold">规划目标</h3>
-        <p class="mt-1 mb-3 text-xs leading-6 text-muted">明确本次范围，先预览草案，或直接生成并提交审批。</p>
+        <p class="mt-1 mb-3 text-xs leading-6 text-muted">明确本次范围，生成并保存草案，核对或编辑后提交这一版。</p>
         <div v-if="canGenerate" class="mb-3 flex flex-wrap gap-2" aria-label="目标示例">
           <button type="button" class="ui-interactive min-h-9 rounded-lg bg-raised px-2.5 text-xs text-muted hover:text-brand" @click="useExample('根据项目资料，规划下一阶段的开发任务，明确优先级和验收标准。')">规划下一阶段开发</button>
           <button type="button" class="ui-interactive min-h-9 rounded-lg bg-raised px-2.5 text-xs text-muted hover:text-brand" @click="useExample('结合现有任务，梳理完成项目目标所缺少的工作，并说明任务之间的依赖。')">梳理遗漏与依赖</button>
@@ -230,25 +258,26 @@ onBeforeUnmount(() => {
           </div>
           <div class="mt-2 flex flex-wrap items-center justify-between gap-2">
             <p class="m-0 text-xs leading-6 text-muted">结合最新项目资料生成，结果需要你核对。</p>
-            <el-button v-if="result" text class="ui-interactive min-h-11!" @click="clearDraft">清空草案</el-button>
+            <el-button v-if="result" text :disabled="draftEditing || approvalSending || draftBusy || sending" class="ui-interactive min-h-11!" @click="clearDraft">关闭预览</el-button>
           </div>
           <p id="planning-help" class="mt-3 mb-0 text-xs leading-6 text-muted">
-            草案为临时预览。切换“提交与审批”，可按当前目标重新生成并保存。
+            草案生成后自动保存。核对或编辑后提交这一版，送审不会重新生成。
           </p>
           <p v-if="info" class="mt-2 mb-0 text-xs leading-6 text-muted">
             <template v-if="info.mode === 'mock'">演示模式返回示例草案，不调用真实大模型。请结合项目实际核对内容。</template>
             <template v-else>生成时，目标、相关文档片段与当前任务会发送给服务器配置的模型服务。请核对生成结果与来源。</template>
           </p>
         </form>
+        <PlanDraftList :project-id="projectId" :refresh-key="draftsRefresh" :selected-id="selectedDraft?.id" :disabled="sending || approvalSending || draftBusy || draftEditing" @select="openDraft" />
       </section>
 
       <div class="flex min-h-0 min-w-0 flex-col gap-3">
         <div class="work-view-switch self-start" aria-label="规划结果视图">
           <button type="button" :aria-pressed="workspaceTab === 'preview'" @click="workspaceTab = 'preview'">草案预览</button>
-          <button type="button" :aria-pressed="workspaceTab === 'approval'" @click="workspaceTab = 'approval'">提交与审批</button>
+          <button type="button" :aria-pressed="workspaceTab === 'approval'" @click="workspaceTab = 'approval'">审批记录</button>
         </div>
         <div class="work-scroll min-h-0 flex-1">
-          <PlanningApprovals v-show="workspaceTab === 'approval'" :project-id="projectId" :goal="goal" :disabled="loading || sending || !info?.configured || !info?.ready_documents" @busy="approvalSending = $event" />
+          <PlanningApprovals v-show="workspaceTab === 'approval'" :project-id="projectId" :refresh-key="approvalsRefresh" :selected-approval="submittedApproval" :disabled="sending || draftEditing || draftBusy" @busy="approvalSending = $event" />
           <div v-show="workspaceTab === 'preview'">
             <section v-if="result" aria-label="任务方案预览" class="ui-enter min-w-0 rounded-xl border border-line bg-surface p-5">
               <header class="mb-4 flex flex-wrap items-start justify-between gap-3">
@@ -256,9 +285,10 @@ onBeforeUnmount(() => {
                   <h2 class="m-0 text-lg font-semibold leading-7">任务方案预览</h2>
                   <p class="mt-2 mb-0 text-sm text-muted">{{ result.proposal.tasks.length }} 项建议任务，按优先级逐步推进。</p>
                 </div>
-                <span class="rounded-full bg-raised px-3 py-1.5 text-xs text-muted">{{ result.mode === "mock" ? "演示草案" : "AI 草案" }} · 未保存</span>
+                <span class="rounded-full bg-raised px-3 py-1.5 text-xs text-muted">{{ result.mode === "mock" ? "演示草案" : "AI 草案" }} · 已保存</span>
               </header>
 
+              <PlanDraftActions v-if="selectedDraft" :draft="selectedDraft" :disabled="sending || approvalSending" @update="updateDraft" @submitted="submitted" @busy="draftBusy = $event" @editing="draftEditing = $event" />
               <!-- 模型、任务和文档内容均通过插值展示为纯文本，不执行 HTML。 -->
               <div class="mb-4">
                 <h3 class="mt-0 mb-3 text-sm font-medium text-muted">方案摘要</h3>

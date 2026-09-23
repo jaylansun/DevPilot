@@ -18,7 +18,7 @@ from app.services.run_limits import (
 
 logger = logging.getLogger(__name__)
 RunOperation = Callable[[EventPublisher], Awaitable[BaseModel]]
-RunKind = Literal["knowledge", "planning", "workflow", "approval"]
+RunKind = Literal["knowledge", "planning", "workflow", "approval", "draft"]
 
 
 class StreamRunner:
@@ -40,7 +40,7 @@ class StreamRunner:
             if timeout is not None
             else (
                 PLANNING_STREAM_TIMEOUT_SECONDS
-                if kind in ("planning", "approval")
+                if kind in ("planning", "approval", "draft")
                 else DEFAULT_STREAM_TIMEOUT_SECONDS
             )
         )
@@ -51,7 +51,7 @@ class StreamRunner:
             async with asyncio.timeout(self._timeout):
                 result = await self._run(self._channel)
                 await self._channel.emit("final", kind=self._kind, result=result)
-        except Exception as exc:
+        except Exception as exc:  # noqa: BLE001 -- 流式边界转换为安全错误事件。
             if isinstance(exc, ApiError):
                 status, code, message = exc.status_code, exc.code, exc.message
             elif isinstance(exc, TimeoutError):

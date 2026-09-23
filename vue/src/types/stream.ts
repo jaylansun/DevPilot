@@ -1,4 +1,4 @@
-import type { ApprovalVO, PlanResultVO, RagAnswerVO, WorkflowResultVO } from "./api";
+import type { ApprovalVO, PlanDraftVO, PlanResultVO, RagAnswerVO, WorkflowResultVO } from "./api";
 
 export const stepNames = [
   "retrieve_knowledge", "answer_knowledge", "validate_result", "classify_intent",
@@ -14,7 +14,7 @@ export type TraceEvent = EventBase & {
 export type TokenEvent = EventBase & { type: "token"; text: string };
 export type ApprovalRequiredEvent = EventBase & { type: "approval_required"; approval: ApprovalVO };
 export type ProgressEvent = TraceEvent | TokenEvent | ApprovalRequiredEvent;
-export type Results = { knowledge: RagAnswerVO; planning: PlanResultVO; workflow: WorkflowResultVO; approval: ApprovalVO };
+export type Results = { knowledge: RagAnswerVO; planning: PlanResultVO; workflow: WorkflowResultVO; approval: ApprovalVO; draft: PlanDraftVO };
 export type RunKind = keyof Results;
 export type FinalEvent = {
   [K in RunKind]: EventBase & { type: "final"; kind: K; result: Results[K] }

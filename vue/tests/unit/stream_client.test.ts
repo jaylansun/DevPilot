@@ -103,7 +103,12 @@ describe("NDJSON 客户端", () => {
     for (const event of contract.events) expect(parseStreamEvent(JSON.stringify(event))).toEqual(event);
   });
 
-  it.each(["planning", "approval"] as const)("%s 等待草案超过旧的 75 秒后仍可正常完成", async kind => {
+  it.each([{ version: 0 }, { status: "unknown" }, { conversation_id: 123 }, { plan: { persisted: false } }])("拒绝非法草案 final：%j", patch => {
+    const sample = structuredClone(contract.events.find(event => event.type === "final" && event.kind === "draft")!);
+    expect(() => parseStreamEvent(JSON.stringify({ ...sample, result: { ...sample.result, ...patch } }))).toThrow();
+  });
+
+  it.each(["planning", "approval", "draft"] as const)("%s 等待草案超过旧的 75 秒后仍可正常完成", async kind => {
     vi.useFakeTimers();
     let writer!: ReadableStreamDefaultController;
     const cancel = vi.fn();
@@ -119,7 +124,7 @@ describe("NDJSON 客户端", () => {
     expect(cancel).toHaveBeenCalledOnce();
   });
 
-  it.each(["planning", "approval"] as const)("%s 延长等待后仍受 140 秒总时限约束", async kind => {
+  it.each(["planning", "approval", "draft"] as const)("%s 延长等待后仍受 140 秒总时限约束", async kind => {
     vi.useFakeTimers();
     const cancel = vi.fn();
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(new ReadableStream({ cancel }), {

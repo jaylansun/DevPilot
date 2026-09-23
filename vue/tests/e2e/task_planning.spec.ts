@@ -1,4 +1,4 @@
-import { finalResponse } from "./stream_helpers";
+import { finalResponse, savedDraft } from "./stream_helpers";
 import { randomUUID } from "node:crypto";
 import { test, expect, type Page } from "@playwright/test";
 
@@ -20,6 +20,7 @@ async function planning(
   } = {},
 ) {
   const id = randomUUID();
+  const drafts: ReturnType<typeof savedDraft>[] = [];
   const state = {
     mode: "mock" as "mock" | "live",
     configured: true,
@@ -40,6 +41,10 @@ async function planning(
   await page.route("**/api/v1/**", async (route) => {
     const req = route.request();
     const path = new URL(req.url()).pathname;
+    if (req.method() === "GET" && path.endsWith("/planning/drafts"))
+      return route.fulfill({ json: { items: drafts, total: drafts.length, offset: 0, limit: 20 } });
+    const draft = drafts.find(item => path.endsWith(`/planning/drafts/${item.id}`));
+    if (req.method() === "GET" && draft) return route.fulfill({ json: draft });
     if (req.method() === "GET" && path.endsWith("/conversations"))
       return route.fulfill({ json: [] });
     if (req.method() === "GET" && path.endsWith("/me"))
@@ -70,7 +75,7 @@ async function planning(
       });
     if (
       req.method() === "POST" &&
-      path === `/api/v1/projects/${id}/planning/proposals/stream`
+      path === `/api/v1/projects/${id}/planning/drafts/stream`
     ) {
       state.calls++;
       state.goals.push(req.postDataJSON());
@@ -123,6 +128,8 @@ async function planning(
       const gate = state.nextResponseGate;
       state.nextResponseGate = null;
       if (gate) await gate;
+      const draft = { ...savedDraft(id, req.postDataJSON().goal, response), id: randomUUID() };
+      if (!fail) drafts.unshift(draft);
       try {
         return await route.fulfill(
           fail
@@ -136,7 +143,7 @@ async function planning(
                   },
                 },
               }
-            : finalResponse("planning", response),
+            : finalResponse("draft", draft),
         );
       } finally {
         state.completed++;
@@ -171,16 +178,16 @@ test("长方案在结果区滚动，预览和审批切换保留目标与草案",
   await preview.getByLabel("已完成只读工具调用", { exact: true }).scrollIntoViewIfNeeded();
   await expect(page.getByRole("navigation", { name: "项目功能" })).toBeInViewport();
   expect(await page.evaluate(() => document.documentElement.scrollHeight <= innerHeight + 1)).toBe(true);
-  await page.getByRole("button", { name: "提交与审批", exact: true }).click();
+  await page.getByRole("button", { name: "审批记录", exact: true }).click();
   await expect(preview).toBeHidden();
-  await expect(page.getByRole("button", { name: "生成并提交审批", exact: true })).toBeInViewport();
+  await expect(page.getByRole("button", { name: "刷新审批记录", exact: true })).toBeInViewport();
   await expect(page.getByLabel("你想完成什么目标？")).toHaveValue("完善下单流程");
   await page.getByRole("button", { name: "草案预览", exact: true }).click();
   await expect(preview).toContainText(state.summary);
   expect(state.calls).toBe(1);
 });
 
-test("任务规划入口展示只读草案、验收依赖和安全引用，双端布局正常", async ({
+test("任务规划入口展示已保存草案、验收依赖和安全引用，双端布局正常", async ({
   page,
 }) => {
   const { id, state } = await planning(page);
@@ -234,11 +241,11 @@ test("任务规划入口展示只读草案、验收依赖和安全引用，双�
   await expect(toolCalls).toContainText("检索项目文档 · 已完成 · 1 项");
   await expect(toolCalls).toContainText("读取任务看板 · 已完成 · 3 项");
   await expect(
-    page.getByText("草案为临时预览。", { exact: false }),
+    page.getByText("草案生成后自动保存", { exact: false }),
   ).toBeVisible();
   await expect(
-    preview.getByRole("button", { name: /提交审批|保存|加入看板/ }),
-  ).toHaveCount(0);
+    preview.getByRole("button", { name: "提交这一版", exact: true }),
+  ).toBeVisible();
   const source = preview.getByLabel("来源 1", { exact: true });
   await expect(source.locator("summary")).toHaveText("[1] 订单规则.md · 第 1 个片段");
   await source.locator("summary").click();
@@ -423,23 +430,22 @@ test("无文档和模型未配置时禁止生成，刷新后恢复真实模型�
   expect(state.unexpectedRequests).toEqual([]);
 });
 
-test("清空草案和刷新页面都不持久保存方案", async ({ page }) => {
+test("关闭预览或刷新后可以打开已保存草案，不再次生成", async ({ page }) => {
   const { state } = await planning(page);
-  const input = page.getByLabel("你想完成什么目标？");
   const preview = page.getByRole("region", { name: "任务方案预览" });
-  await input.fill("完成点餐网站第一版");
+  await page.getByLabel("你想完成什么目标？").fill("完成点餐网站第一版");
   await page.getByRole("button", { name: "生成任务草案", exact: true }).click();
   await expect(preview).toBeVisible();
-  await page.getByRole("button", { name: "清空草案", exact: true }).click();
+  await page.getByRole("button", { name: "关闭预览", exact: true }).click();
   await expect(preview).toHaveCount(0);
-  expect(state.calls).toBe(1);
-  await input.fill("完成点餐网站第一版");
-  await page.getByRole("button", { name: "生成任务草案", exact: true }).click();
-  await expect(preview).toBeVisible();
+  const open = page.getByRole("button", { name: "打开草案：完成点餐网站第一版", exact: true });
+  await open.click();
+  await expect(preview).toContainText(initialSummary);
   await page.reload();
-  await expect(page.getByRole("button", { name: "刷新规划状态" })).toBeEnabled();
   await expect(preview).toHaveCount(0);
-  await expect(page.getByRole("button", { name: "清空草案", exact: true })).toHaveCount(0);
-  expect(state.calls).toBe(2);
+  await open.click();
+  await expect(preview).toContainText(initialSummary);
+  await expect(preview).toContainText("已保存 · 第 1 版");
+  expect(state.calls).toBe(1);
   expect(state.unexpectedRequests).toEqual([]);
 });

@@ -97,15 +97,16 @@ class PlanService:
 
     async def create(
         self,
-        session: AsyncSession,
         owner_id: UUID,
         project_id: UUID,
         goal: str,
         *,
         events: EventPublisher = NOOP_EVENTS,
     ) -> PlanResultVO:
-        await require_document_project(session, owner_id, project_id)
-        if not await list_ready_documents(session, project_id):
+        async with self.session_factory() as session:
+            await require_document_project(session, owner_id, project_id)
+            documents = await list_ready_documents(session, project_id)
+        if not documents:
             raise ApiError(
                 409,
                 "planning_no_documents",

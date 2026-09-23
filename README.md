@@ -1,71 +1,188 @@
 # DevPilot
 
-一个用于学习 FastAPI、LangChain、LangGraph 和 Vue 的 AI 项目协作助手。
+DevPilot 是一个 AI 项目协作助手，将项目资料、需求分析、任务规划和人工审批连接在同一个工作区。成员可以基于知识库提问、对照现有任务检查需求缺口，并生成带优先级和验收标准的任务方案；审批人确认后，方案中的任务才会加入项目看板。
 
-## 当前完成内容
+## 核心功能
 
-- 第 1～4 天：后端基础、账号认证、角色权限、项目与任务管理接口；
-- 第 5 天：Vue 登录、项目列表、项目详情、新建/编辑/删除项目和响应式工作区布局；
-- 第 6 天：项目任务看板、任务增删改查、状态流转、优先级筛选与版本冲突处理；
-- 第 7 天：文档上传、Markdown 分块、本地中文向量模型、Chroma 持久化、后台索引与失败重试；
-- 第 8 天：两步知识库问答、服务端来源校验、可展开的原文引用、显式演示/真实模型模式和 12 条固定评估用例；
-- 第 9 天：只读工具、带身份上下文的 Agent、结构化任务草案和独立的“任务规划”页面；
-- 第 10 天：显式 LangGraph 意图路由、文档与看板并行读取，以及带依据和检查范围的“需求检查”页面；
-- 第 11 天：NDJSON 流式接口、AI 回答增量显示、节点与工具实时轨迹，以及断流、取消和错误处理；
-- 第 12 天：持久规划会话、PostgreSQL Checkpoint、人工批准/修改/拒绝，以及批准后的幂等任务写入；
-- 第 13 天：审批组件与故障回归、真实 API 全流程浏览器验收，以及两次进程重启后的持久化和幂等验证；
-- PostgreSQL 17 + pgvector、数据库迁移、Docker Compose 和 Jenkins 测试部署。
+| 功能 | 说明 |
+| --- | --- |
+| 项目与任务管理 | 管理项目、任务状态、优先级和验收标准；默认紧凑列表，支持切换三列看板、筛选和分页 |
+| 项目知识库 | 上传 Markdown / TXT 文档，后台分块与向量索引，支持索引状态查看、失败重试和删除 |
+| AI 问答 | 根据项目资料回答问题，附带可展开的原文引用，支持回答增量显示 |
+| 需求检查 | 识别文档问答、任务查询和需求检查意图，对照文档与任务提出可能遗漏和待确认问题 |
+| 任务规划 | 根据目标检索资料、读取看板，生成并保存任务草案，支持版本化编辑与直接送审 |
+| 人工审批 | 保存规划会话，支持批准、修改后批准或拒绝；批准后写入任务，重复执行不会重复创建 |
+| 执行进度 | 实时展示规划和检查中的节点、工具执行状态，支持取消等待和错误重试 |
+| 持久化与恢复 | 保存草案、规划记录、审批决定和工作流检查点，支持中断后继续处理 |
 
-“需求检查”入口可识别文档问答、已有任务查询和需求缺口检查，保持只读。AI 问答、需求检查和任务规划已接入流式响应；规划可保存并提交人工审批，批准后加入任务看板。第 13 天补齐集中测试与故障验证；接下来是第 14 天的部署与演示整理。
+## 使用流程
 
-第 7 天的部署步骤、示例文档、模型下载和数据保存说明见 [文档知识库说明](docs/day7-knowledge-library.md)。
+1. **准备项目**：成员创建项目，填写需求说明，维护已有任务。
+2. **上传资料**：在“知识库”上传 `.md` / `.txt` 文档，等待状态变为“已就绪”。
+3. **理解与检查需求**：在“AI 问答”中提问并核对引用；在“需求检查”中对照现有任务，查看可能遗漏和待确认事项。
+4. **生成并修改草案**：在“任务规划”输入目标，例如“根据需求文档拆分下单功能”。生成成功后自动保存，可修改摘要、任务标题、说明、优先级和验收标准，再点击“保存修改”。刷新页面后，可从“已保存草案”重新打开。
+5. **提交人工审批**：核对草案后点击“提交这一版”。系统使用已保存版本直接送审，不再调用模型；在“审批记录”中查看进度。提交后的草案不能继续修改，审批人仍可修改后批准。
+6. **批准并跟踪执行**：审批人登录独立的“审批工作区”，审阅或修改方案。批准后，成员可在任务列表中查看并推进任务。
 
-第 8 天的模型配置、隐私边界和评估方法见 [知识库问答说明](docs/day8-knowledge-qa.md)。默认 `AI_MODE=mock` 仅展示真实检索的来源，不调用在线模型，不伪装成已接入 AI。真实模式需要配置模型后另行验收。
+草案编辑采用版本校验；遇到冲突会保留本地编辑，需核对最新版本后再操作。重复送审同一草案会复用原会话。需求检查和规划工具只读取项目数据，保存草案不会创建看板任务。审批完成后才会写入看板；停止等待不会撤销已经保存的草案、送审绑定或审批决定，可刷新记录确认结果。
 
-第 9 天的使用方法、文件职责、工具权限和调用限制见 [任务规划说明](docs/day9-task-planning.md)。规划的 `mock` 模式用真实检索和看板读取配合固定模板展示草案；`live` 模式才由聊天模型调用工具并拆解任务。
+## 快速启动
 
-第 10 天的流程、范围限制与验证见 [需求缺口检查说明](docs/day10-requirement-check.md)。检查的 `mock` 模式只展示真实读取范围，不生成覆盖或遗漏结论；`live` 模式才生成报告。没有明显遗漏时允许空建议，有对应任务不代表已经实现，检索片段不代表全文覆盖。
-
-第 11 天的协议、执行轨迹、取消语义与验证见 [流式输出说明](docs/day11-streaming.md)。真实问答文字逐步显示；报告和草案实时显示执行进度，通过校验后展示完整结果。`mock` 模式不模拟模型打字效果。
-
-第 12 天的使用步骤、暂停与恢复、审批事务和验证见 [持久规划与审批说明](docs/day12-approvals.md)。升级需要安装新增依赖并执行数据库迁移；当前支持单 API 实例，Checkpoint 和审批记录都保存在 PostgreSQL。
-
-第 13 天的测试范围、隔离环境与一键验收见 [测试与故障验证说明](docs/day13-testing.md)。在根目录运行 `service/.venv/bin/python scripts/test_day13.py`，会创建临时 PostgreSQL 和索引目录，完成单元、集成、浏览器与重启验证后自动清理；不使用日常业务库和真实模型凭据。
-
-## 启动
-
-1. 确认 WSL 中的 Docker Engine 已启动。
-2. 在项目根目录执行：
-
-   ```bash
-   sudo docker compose up --build
-   ```
-
-3. 打开：
-   - 前端：<http://localhost:5173>
-   - FastAPI 文档：<http://localhost:8000/docs>
-   - 健康检查：<http://localhost:8000/api/v1/health>
-
-## Jenkins
-
-Jenkins 使用可选的 `ci` Profile，不会随日常开发服务自动启动：
+需要 Python 3、Docker 和支持 `up --wait` 的 Docker Compose。后端、前端和数据库依赖均在容器内安装。从仓库根目录执行：
 
 ```bash
-sudo docker compose --profile ci up -d jenkins
+python3 scripts/init_env.py
+docker compose -f docker-compose.yml up -d --build --wait --wait-timeout 180
+docker compose -f docker-compose.yml exec api python -m app.cli.seed_demo
 ```
 
-打开 <http://localhost:8080>，首次解锁密码通过以下命令读取：
+配置工具生成随机数据库密码和 JWT 密钥，并拒绝覆盖已有 `.env`。最后一步初始化示例账号、项目、任务和知识库文档，按隐藏提示设置成员与审批人密码。默认用户名为 `demo14_member` / `demo14_reviewer`，没有默认密码；也可以通过 `--member` 和 `--reviewer` 指定用户名。
+
+| 入口 | 地址 |
+| --- | --- |
+| 前端 | [localhost:5173](http://localhost:5173) |
+| API 文档 | [localhost:8000/docs](http://localhost:8000/docs) |
+| 代理健康检查 | [localhost:5173/api/v1/health](http://localhost:5173/api/v1/health) |
+
+首次索引需要下载中文向量模型，请等知识库文档“已就绪”后再提问。可以使用自带的[餐厅外卖网站需求文档](service/demo/restaurant.md)体验完整流程。
+
+上述命令显式使用通用 Compose 配置，不会自动读取本机覆盖文件。已有部署应继续沿用原配置、Compose 项目名和端口。业务数据与索引保存在 `postgres_data`、`knowledge_data` 命名卷中，日常更新不要使用 `down -v`。
+
+### 模型配置
+
+默认 `AI_MODE=mock`，可以体验上传、真实检索、审批和任务写入，无需在线模型密钥。问答使用资料摘录，规划使用固定模板，需求检查只展示实际读取范围，不生成覆盖或遗漏结论。
+
+要启用模型问答、任务拆解和需求检查报告，在 `.env` 中配置：
+
+```dotenv
+AI_MODE=live
+MODEL_NAME=供应商提供的模型标识
+LLM_API_KEY=自行填写
+LLM_BASE_URL=供应商的OpenAI兼容接口地址
+```
+
+模型需要支持 Chat Completions、工具调用和项目使用的结构化输出。真实模式会将问题或目标、相关文档片段及必要的任务信息发送给配置的模型服务，回答质量需要结合项目资料评估。
+
+更新配置后，重新创建 API 和 Web 容器：
 
 ```bash
-sudo docker compose --profile ci exec jenkins \
+docker compose -f docker-compose.yml up -d --force-recreate --wait --wait-timeout 180 api web
+```
+
+使用 Jenkins 部署时，更新 `devpilot-env-file` Secret file 凭据后重新构建。更换模型时需同时核对模型名称、API Key 和接口地址。
+
+### 账号管理
+
+项目不开放注册接口。除初始化示例数据外，也可通过管理命令创建账号，密码会隐藏输入：
+
+```bash
+docker compose -f docker-compose.yml exec api \
+  python -m app.cli.create_user demo_member --role member
+
+docker compose -f docker-compose.yml exec api \
+  python -m app.cli.create_user demo_reviewer --role reviewer
+```
+
+调整已有用户的角色：
+
+```bash
+docker compose -f docker-compose.yml exec api \
+  python -m app.cli.set_user_role 用户名 reviewer
+```
+
+成员管理自己的项目，审批人进入独立审批工作区，审阅已提交的方案。登录令牌保存在当前标签页的 `sessionStorage`，不保存密码；页面刷新后会重新确认身份。
+
+## 技术栈与结构
+
+| 层次 | 技术与职责 |
+| --- | --- |
+| 前端 | Vue 3、TypeScript、Vite、Vue Router、Pinia、Element Plus、Tailwind CSS 4 |
+| API | Python 3.12+、FastAPI、Pydantic、SQLAlchemy 异步会话、Alembic |
+| AI 编排 | LangChain 工具调用与结构化任务规划；LangGraph 意图路由、并行读取、审批暂停与恢复 |
+| 知识检索 | FastEmbed 本地中文向量模型、Chroma 持久化索引 |
+| 数据存储 | PostgreSQL 保存账号、项目、任务、文档原文、审批记录和工作流检查点 |
+| 流式通信 | NDJSON 传输回答增量、执行进度和最终结果 |
+| 部署与验证 | Docker Compose、Nginx、Jenkins、pytest、Vitest、Playwright |
+
+浏览器通过 Nginx 访问 FastAPI。后端读取 PostgreSQL 中的业务数据，在 Chroma 中检索文档片段，并按配置调用模型服务。数据库容器使用 PostgreSQL 17 的 pgvector 镜像，当前知识库向量检索由 Chroma 承担。
+
+```text
+service/
+  app/api/          API 路由与请求处理
+  app/services/     检索、规划、工作流、流式事件与审批逻辑
+  app/models/       数据库模型
+  app/schemas/      请求与响应结构
+  app/cli/          账号管理、示例数据与评估命令
+  tests/            后端测试
+  demo/             示例项目与需求资料
+vue/
+  src/views/        页面
+  src/components/   共用组件
+  src/api/          接口与流式响应处理
+  src/types/        API 类型与流式事件契约
+  tests/            前端与浏览器测试
+scripts/            配置初始化与集成验收工具
+docs/               功能、部署与验证文档
+```
+
+## 本地开发与验证
+
+### 前端开发
+
+```bash
+cd vue
+npm ci
+npm run dev
+```
+
+开发服务器默认将 `/api` 转发到 `http://localhost:8000`，可通过 `DEVPILOT_API_PROXY` 指定其他后端。容器部署时由 Nginx 转发到 `api:8000`。
+
+页面样式使用 Tailwind 工具类，品牌色、断点和公共样式位于 `vue/src/assets/tailwind.css`。状态与优先级颜色使用完整类名映射，避免生产构建遗漏动态拼接的样式。
+
+接口类型由 FastAPI OpenAPI 生成。修改后端接口后，在已安装 uv、同步后端依赖并配置后端环境的情况下，进入 `vue` 目录执行 `npm run generate:api`，将生成文件随代码提交。前后端共享的流式事件契约位于 `vue/src/types/stream.contract.json`。
+
+### 测试
+
+在 `vue` 目录执行：
+
+```bash
+npm test
+npm run build
+npm run test:e2e
+npm run test:e2e:preview
+```
+
+浏览器测试使用本机 Chrome；默认自动启动的测试前端占用 5174 端口，如有冲突，可使用 `DEVPILOT_E2E_PORT=5184 npm run test:e2e:preview`。常规浏览器回归使用 API 替身和独立测试数据；`test:e2e:preview` 会先构建生产包，再验证打包后的页面。
+
+在仓库根目录验证配置初始化工具：
+
+```bash
+python3 -m unittest discover -s scripts/tests -v
+```
+
+完整集成验收需要 Docker、本地后端虚拟环境、前端依赖和 Chrome，执行：
+
+```bash
+service/.venv/bin/python scripts/test_day13.py
+```
+
+该工具创建临时 PostgreSQL 和索引目录，验证真实 API、审批、浏览器操作及进程重启后的恢复，不使用日常业务库或真实模型凭据。依赖准备和测试范围见[测试与故障验证](docs/day13-testing.md)。
+
+### Jenkins
+
+Jenkins 通过可选的 `ci` Profile 启动：
+
+```bash
+docker compose --profile ci up -d jenkins
+docker compose --profile ci exec jenkins \
   cat /var/jenkins_home/secrets/initialAdminPassword
 ```
 
-Jenkins 配置、插件和任务保存在 Docker 命名卷 `jenkins_home` 中，重建容器不会丢失。
+打开 [localhost:8080](http://localhost:8080)，首次使用时输入命令输出的解锁密码。配置、插件和任务保存在 `jenkins_home` 命名卷中。
 
-Jenkins 的后端测试使用独立的假配置和禁网测试容器，不读取部署 `.env`，也不调用真实模型或连接项目数据库。测试用例使用临时数据库或模拟对象验证行为；部署阶段仍从 `devpilot-env-file` 凭据读取真实配置。因此，将部署模式改为 `AI_MODE=live` 不应改变测试条件。
+流水线在隔离环境中运行后端测试，构建前端时执行单元测试与生产打包，通过后读取部署凭据并更新服务。后端测试容器禁网，不读取部署 `.env`、连接业务数据库或调用真实模型；浏览器测试需单独运行。
 
-后端测试还会校验前后端共用的 `vue/src/types/stream.contract.json`。Jenkins 通过 Docker 命名构建上下文把该文件加入测试镜像；本地手动构建同一测试镜像时，在仓库根目录执行：
+在仓库根目录手动运行同一后端测试镜像：
 
 ```bash
 docker build --build-context stream_contract=vue/src/types \
@@ -77,120 +194,30 @@ docker run --rm --network none \
   devpilot-api-test:local
 ```
 
-共享契约只进入 `test` 阶段，日常 `docker compose build api` 构建的运行镜像不需要这个额外上下文。参见 [Docker 命名构建上下文说明](https://docs.docker.com/build/concepts/context/#named-contexts)。
+命名构建上下文用于将共享流式契约加入测试镜像，普通 API 运行镜像不需要该额外上下文。
 
-## 本地不使用 Docker 的前端启动方式
+## 使用范围
 
-```powershell
-cd vue
-npm ci
-npm run dev
-```
+- 当前支持单 API 实例；草案、规划会话与审批检查点持久化到 PostgreSQL。
+- 普通写接口在发送成功响应前提交事务；AI 等待和流式传输期间，鉴权与业务查询使用的数据库连接已释放。
+- 本版本新增 `0006_plan_drafts` 迁移。已有环境升级需先执行 `alembic upgrade head`；Compose/Jenkins 的启动命令会自动执行迁移。旧的只读规划 API 和审批会话仍兼容。
+- 知识库支持 Markdown 和 TXT；检查结果基于实际检索到的片段，不能视为全文覆盖。有对应任务也不代表功能已经实现。
+- 真实问答文字逐步显示；任务草案与检查报告先展示执行进度，通过校验后展示完整结果。
+- 任务编辑使用版本检查，冲突时保留草稿并提示重新载入，避免覆盖其他修改。看板支持列表与三列视图，暂不支持拖拽排序或多人实时同步。
 
-本地前端默认把 `/api` 转发至 `http://localhost:8000`。如使用单独的测试后端，可通过 `DEVPILOT_API_PROXY` 环境变量指定地址；容器内仍由 Nginx 转发给 `api:8000`。
+## 详细文档
 
-## 页面使用
+| 主题 | 文档 |
+| --- | --- |
+| 部署、配置与故障定位 | [部署指南](docs/day14-deployment-demo.md) |
+| 完整操作示例 | [演示脚本](docs/day14-recording-script.md) |
+| 文档上传、分块与索引 | [知识库](docs/day7-knowledge-library.md) |
+| 问答、引用与效果评估 | [知识库问答](docs/day8-knowledge-qa.md) |
+| 工具调用与任务草案 | [任务规划](docs/day9-task-planning.md) |
+| 意图路由与需求对照 | [需求检查](docs/day10-requirement-check.md) |
+| 事件协议与取消处理 | [流式响应](docs/day11-streaming.md) |
+| 事务与草案直接送审 | [实现方案与验证](docs/transaction-and-drafts-plan.md) |
+| 持久会话与人工决策 | [规划与审批](docs/day12-approvals.md) |
+| 集成验收与恢复测试 | [测试与故障验证](docs/day13-testing.md) |
 
-1. 打开前端页面，用已创建的成员账号登录。
-2. 点击“新建项目”，填写项目名称和需求说明。例如：名称“餐厅外卖网站”，说明“顾客能点菜付款，餐厅能接单”。
-3. 在项目卡片上点击“打开项目”查看说明，或使用编辑、删除按钮。
-4. 删除前会再次确认，并提示项目下的任务和文档也会删除，对应向量在后台清理。
-5. 打开项目后，点击“任务看板”，新建任务并填写标题、说明、优先级和验收标准。
-6. 看板按“待办 / 进行中 / 已完成”分列，卡片底部可切换状态。点击任务标题或编辑按钮查看完整内容；删除需再次确认。
-7. 在“知识库”上传 .md / .txt，等待索引就绪。进入“AI 问答”，输入关于资料的问题，展开回答下方的文件名查看原文片段。
-8. 进入“任务规划”，输入目标，例如“根据需求文档拆分下单功能”。“生成任务草案”提供临时预览；下方“生成并提交审批”根据目标生成并保存一份新方案，刷新后仍可查看。生成本身不会在看板创建任务。
-9. 进入“需求检查”，输入“对照需求文档，看看现有任务还漏了什么，有哪些需求需要确认？”。核对已有对应任务、可能遗漏和待确认问题，并查看实际读到的片段与任务。也可在此查询已有任务或询问文档规则。
-10. 审批人登录“审批工作区”，查看已提交方案与依据，可以直接批准、修改后批准或拒绝。批准后由后端把任务一次性写入看板；成员刷新规划记录或任务看板即可查看结果。
-
-例如，“餐厅外卖网站”是项目；“完成购物车页面”“编写订单接口”是项目下的任务。“可以添加商品、修改数量，总价计算正确”是购物车任务的验收标准。
-
-状态和优先级可以组合筛选，各列分别分页，每次加载 8 条，点击“加载更多”查看后续任务。刷新页面会保留看板入口，筛选条件恢复默认。创建和编辑不符合当前筛选条件的任务后会有提示，可以清除筛选查看。
-
-修改任务只提交改过的字段，并携带开始编辑时的 `version`。如果期间任务被其他请求修改，后端返回 409；页面保留草稿、停止保存，点击“载入最新任务”并确认后才能重新编辑，避免直接覆盖他人的修改。卡片切换状态也使用版本检查；网络失败不会显示虚假的成功状态。
-
-当前看板支持成员手工创建任务，也接收人工批准后的 AI 规划任务。没有拖拽排序或多人实时同步，新内容可通过“刷新任务看板”重新读取。重复执行同一审批不会重复创建任务；停止等待不会撤销已经保存的审批决定，应刷新记录确认结果。
-
-登录页的演示账号按钮只填写用户名，不会创建账号，也不包含默认密码。审批人登录后进入独立的审批工作区，只能审阅已经提交的方案。
-
-令牌保存在当前标签页的 `sessionStorage`，不保存密码；页面刷新后通过 `/me` 重新确认身份。项目列表和详情每次从后端读取。登录失效时会回到登录页，临时网络失败可以重试。
-
-## 前端代码与验证
-
-前端使用 Vue Router 管理页面、Pinia 保存登录状态、Element Plus 构建中文表单，Tailwind CSS 4 负责页面布局、间距、颜色和响应式样式。`src/api/*_api.ts` 封装接口，`http_client.ts` 统一处理令牌、超时和中文错误；`src/views` 是页面，`src/components` 是共用组件。
-
-### 样式约定
-
-- 使用 Tailwind 工具类编写页面样式，不再新增独立的页面 CSS 文件；没有引入 UnoCSS 或 SCSS。
-- `vue/src/assets/tailwind.css` 是构建入口：通过 `@theme` 统一品牌色、字体和断点，通过少量 `@apply` 公共类复用表单、弹窗和提示样式。它是 Tailwind 的配置与公共样式，不是另一套页面样式表。
-- Element Plus 样式归入单独的层，项目公共样式和工具类位于其后；不引入 Tailwind Preflight，避免全局重置影响已有组件。
-- 任务状态、优先级等动态颜色使用完整类名映射，不拼接 `bg-${color}` 之类的类名，否则生产构建可能漏掉样式。
-- 断点为 `mobile`（680px）、`tablet`（850px）、`board`（1050px）、`desktop`（1150px）、`wide`（1550px）；例如 `grid grid-cols-3 max-board:grid-cols-1` 表示宽屏三列、小屏一列。
-- 依赖与锁文件一起提交；Docker / Jenkins 使用原有 `npm ci` 和 `npm run build`，不需要安装额外的全局工具。
-
-接口类型位于 `vue/src/types/api.generated.ts`，从本地 FastAPI OpenAPI 生成，保留后端的 QO/VO 命名。修改后端接口后，在 `vue` 目录执行：
-
-```bash
-npm run generate:api
-```
-
-生成命令需要本地安装 uv、同步后端依赖，并具备后端配置。生成文件应随代码提交，镜像构建不需要运行后端来生成类型。
-
-在 `vue` 目录运行前端检查：
-
-```bash
-npm test
-npm run build
-npm run test:e2e
-npm run test:e2e:preview
-```
-
-浏览器回归使用本机 Chrome，并自动在 5174 端口启动测试前端；API 替身使用独立的测试数据，不会操作真实项目。测试覆盖登录恢复、角色拦截、项目与任务增删改查、分页、筛选、版本冲突、问答引用、规划草案、取消等待、错误重试和手机布局。
-
-审批另有连接独立 PostgreSQL 的恢复/回滚测试，以及使用真实认证与 API 的浏览器验收。未配置独立测试服务时这些用例会跳过，启动方法见 [第 12 天验证说明](docs/day12-approvals.md#验证)。
-
-`test:e2e:preview` 会先生成生产包，再用相同用例测试打包后的页面；包含品牌色、优先级颜色、状态色及响应式列布局的检查，避免开发模式正常但部署后样式缺失。
-
-任务相关代码分为：`task_api.ts` 封装接口；`use_task_board.ts` 管理分列分页、筛选和迟到请求；`task_form.ts` 构建新建与局部更新参数；`TaskBoard.vue` 展示看板；`TaskDialog.vue` 处理任务表单与编辑冲突。任务类型直接引用生成的 QO/VO，与后端字段保持一致。
-
-前端 Dockerfile 使用 `npm ci` 按锁文件安装依赖，并在打包前运行单元测试。Jenkins 原有“构建镜像”步骤会执行这些检查，通过后继续部署。浏览器测试单独运行，需要 Chrome。
-
-## 预置账号
-
-项目不开放注册接口。通过容器内的管理命令创建成员或审批人账号，密码会隐藏输入：
-
-```bash
-sudo docker compose exec api \
-  python -m app.cli.create_user demo_member --role member
-
-sudo docker compose exec api \
-  python -m app.cli.create_user demo_reviewer --role reviewer
-```
-
-将已有用户设置为审批人：
-
-```bash
-sudo docker compose exec api \
-  python -m app.cli.set_user_role 用户名 reviewer
-```
-
-## 当前后端接口
-
-- `POST /api/v1/auth/token`：登录并返回 Bearer JWT；
-- `GET /api/v1/me`：读取当前账号；
-- `/api/v1/projects`：创建、分页列表、详情、局部更新和删除项目；
-- `/api/v1/projects/{project_id}/tasks`：创建、筛选、分页、局部更新和删除任务；
-- `/api/v1/projects/{project_id}/documents`：上传、列表与索引状态；
-- `DELETE /api/v1/projects/{project_id}/documents/{document_id}`：受理删除文档与对应向量；
-- `POST /api/v1/projects/{project_id}/documents/{document_id}/retry`：重试失败的索引或删除；
-- `GET /api/v1/projects/{project_id}/knowledge`：读取问答模式、模型配置是否齐全和就绪文档数；
-- `POST /api/v1/projects/{project_id}/knowledge/questions`：单轮两步 RAG 问答，返回回答及来源片段；
-- `GET /api/v1/projects/{project_id}/planning`：读取规划模式、配置状态、就绪文档数与现有任务数；
-- `POST /api/v1/projects/{project_id}/planning/proposals`：按目标生成临时任务草案，不写入看板；
-- `GET /api/v1/projects/{project_id}/assistant`：读取需求检查与项目助手状态；
-- `POST /api/v1/projects/{project_id}/assistant/runs`：只读需求检查、文档问答或任务查询；
-- `POST /api/v1/projects/{project_id}/conversations`：创建持久规划会话；同路径 `GET` 读取规划记录；
-- `GET /api/v1/conversations/{id}`：读取会话、恢复状态和审批快照；
-- `POST /api/v1/conversations/{id}/runs/stream`：流式生成、提交或恢复规划，暂停等待审批；
-- `GET /api/v1/approvals`、`GET /api/v1/approvals/{id}`：审批列表和详情；
-- `POST /api/v1/approvals/{id}/decide/stream`：审批人批准、修改后批准或拒绝，并恢复执行；
-- `GET /api/v1/health`：服务健康检查。
+完整接口、请求参数与响应结构见运行服务后的 [API 文档](http://localhost:8000/docs)。

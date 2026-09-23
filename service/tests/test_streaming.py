@@ -278,7 +278,9 @@ async def test_stream_api_auth_contract_and_actual_readonly_services(
 
     config = configuration()
     service = {
-        "knowledge": lambda: RagService(config, index, RagModelService(config)),
+        "knowledge": lambda: RagService(
+            config, index, RagModelService(config), factory
+        ),
         "planning": lambda: PlanService(
             config, index, factory, PlanAgentService(config)
         ),
@@ -466,13 +468,12 @@ async def test_invalid_citation_after_tokens_emits_error_and_releases_slot(
 
     model = AsyncMock()
     model.answer.side_effect = bad_answer
-    rag = RagService(configuration(), index, model)
-    async with factory() as session:
-        events = await collect(
-            lambda events: rag.answer(
-                session, owner, project, "规则？", events=events, streaming=True
-            )
+    rag = RagService(configuration(), index, model, factory)
+    events = await collect(
+        lambda events: rag.answer(
+            owner, project, "规则？", events=events, streaming=True
         )
+    )
     assert any(e["type"] == "token" for e in events)
     assert events[-1]["type"] == "error"
     assert events[-1]["error"]["code"] == "invalid_model_citations"
@@ -496,7 +497,7 @@ async def test_asgi_disconnect_cancels_model_and_releases_service_slot(
 
     model = AsyncMock()
     model.answer.side_effect = wait_model
-    rag = RagService(configuration(), index, model)
+    rag = RagService(configuration(), index, model, factory)
     async with factory() as session:
         user = await session.get(UserDO, owner)
     app = api_app_factory(user)

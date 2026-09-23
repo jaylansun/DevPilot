@@ -17,6 +17,7 @@ from app.services.checkpoint_service import open_checkpointer
 from app.services.document_index_service import DocumentIndexService
 from app.services.document_worker_service import DocumentWorkerService
 from app.services.plan_agent_service import PlanAgentService
+from app.services.plan_draft_service import PlanDraftService
 from app.services.plan_service import PlanService
 from app.services.rag_model_service import RagModelService
 from app.services.rag_service import RagService
@@ -30,20 +31,30 @@ settings = get_settings()
 async def lifespan(application: FastAPI):
     index_service = DocumentIndexService(settings.knowledge_data_dir)
     application.state.rag_service = RagService(
-        settings, index_service, RagModelService(settings)
+        settings, index_service, RagModelService(settings), AsyncSessionFactory
     )
     application.state.plan_service = PlanService(
         settings, index_service, AsyncSessionFactory, PlanAgentService(settings)
     )
     application.state.workflow_service = WorkflowService(
-        settings, index_service, AsyncSessionFactory,
-        WorkflowModelService(settings), RagModelService(settings),
+        settings,
+        index_service,
+        AsyncSessionFactory,
+        WorkflowModelService(settings),
+        RagModelService(settings),
     )
     async with AsyncExitStack() as stack:
         stack.push_async_callback(close_database)
-        saver = await stack.enter_async_context(open_checkpointer(settings.database_url))
+        saver = await stack.enter_async_context(
+            open_checkpointer(settings.database_url)
+        )
         application.state.approval_service = ApprovalService(
             AsyncSessionFactory, application.state.plan_service, saver
+        )
+        application.state.plan_draft_service = PlanDraftService(
+            AsyncSessionFactory,
+            application.state.plan_service,
+            application.state.approval_service,
         )
         worker = DocumentWorkerService(AsyncSessionFactory, index_service)
         task = asyncio.create_task(worker.run(), name="document-index-worker")

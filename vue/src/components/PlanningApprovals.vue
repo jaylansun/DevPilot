@@ -1,13 +1,13 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from "vue";
-import { createConversation, listConversations, runConversation } from "@/api/approval_api";
+import { onBeforeUnmount, onMounted, ref, watch } from "vue";
+import { listConversations, runConversation } from "@/api/approval_api";
 import { ApiError, errorMessage } from "@/api/http_client";
 import type { ApprovalVO, ConversationVO } from "@/types/api";
 import type { TraceEvent } from "@/types/stream";
 import ApprovalDetails from "./ApprovalDetails.vue";
 import RunTrace from "./RunTrace.vue";
 
-const props = defineProps<{ projectId: string; goal: string; disabled: boolean }>();
+const props = defineProps<{ projectId: string; disabled: boolean; refreshKey?: number; selectedApproval?: ApprovalVO | null }>();
 const emit = defineEmits<{ busy: [value: boolean] }>();
 const items = ref<ConversationVO[]>([]);
 const selected = ref<ApprovalVO | null>(null);
@@ -30,13 +30,12 @@ async function load() {
     if (active && !current.signal.aborted) message.value = errorMessage(error);
   } finally { if (active && !current.signal.aborted) loading.value = false; }
 }
-async function submit(id?: string) {
-  if (busy.value || (!id && props.disabled)) return;
-  if (!id && !props.goal.trim()) { message.value = "请先填写规划目标"; return; }
+async function submit(id: string) {
+  if (busy.value || props.disabled) return;
   busy.value = true; emit("busy", true); message.value = ""; trace.value = []; selected.value = null;
   const current = new AbortController(); controller = current;
   try {
-    const conversationId = id ?? (await createConversation(props.projectId, props.goal.trim(), current.signal)).id;
+    const conversationId = id;
     const approval = await runConversation(conversationId, current.signal, event => {
       if (!active || current.signal.aborted) return;
       if (event.type === "node" || event.type === "tool") trace.value.push(event);
@@ -52,6 +51,8 @@ async function submit(id?: string) {
   }
 }
 function page(delta: number) { offset.value = Math.max(0, offset.value + delta); void load(); }
+watch(() => props.refreshKey, () => { offset.value = 0; void load(); });
+watch(() => props.selectedApproval, value => { if (value) selected.value = value; });
 onMounted(load);
 onBeforeUnmount(() => { active = false; controller?.abort(); loader?.abort(); });
 </script>
@@ -59,9 +60,8 @@ onBeforeUnmount(() => { active = false; controller?.abort(); loader?.abort(); })
 <template>
   <section aria-label="持久规划与审批" class="min-w-0 rounded-xl border border-line bg-surface p-4">
     <div class="flex flex-wrap items-start justify-between gap-3">
-      <div><h3 class="m-0 text-base font-semibold">生成并提交审批</h3><p class="mt-1 mb-0 text-xs leading-6 text-muted">根据当前目标生成并保存新方案，审批人批准后加入看板。</p></div>
+      <div><h3 class="m-0 text-base font-semibold">审批记录</h3><p class="mt-1 mb-0 text-xs leading-6 text-muted">在草案预览中提交已保存版本；审批人批准后，任务才加入看板。</p></div>
       <div class="flex flex-wrap gap-2 [&>.el-button+.el-button]:ml-0">
-        <el-button type="primary" :disabled="disabled || !goal.trim() || busy" :loading="busy" @click="submit()">生成并提交审批</el-button>
         <el-button v-if="busy" @click="controller?.abort()">停止等待</el-button>
         <el-button :loading="loading" :disabled="busy" @click="load">刷新审批记录</el-button>
       </div>
@@ -73,7 +73,7 @@ onBeforeUnmount(() => { active = false; controller?.abort(); loader?.abort(); })
       <li v-for="item in items" :key="item.id" class="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-raised/60 p-3">
         <div class="min-w-0 flex-1"><p class="m-0 line-clamp-2 text-sm leading-6 wrap-anywhere" :title="item.goal">{{ item.goal }}</p><p class="mt-1 mb-0 text-xs text-muted">{{ labels[item.status] }}</p></div>
         <el-button v-if="item.approval" :disabled="busy" @click="selected = item.approval">查看方案</el-button>
-        <el-button v-else :disabled="busy || disabled" @click="submit(item.id)">继续生成并提交</el-button>
+        <el-button v-else :disabled="busy || disabled" @click="submit(item.id)">继续处理</el-button>
       </li>
     </ul>
     <div v-if="offset || items.length === 20" class="flex gap-2">

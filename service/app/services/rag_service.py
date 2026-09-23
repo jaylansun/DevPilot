@@ -45,10 +45,13 @@ def build_answer(
 class RagService:
     """两步问答：先限定范围检索，再带来源生成；不引入 Agent 或写操作。"""
 
-    def __init__(self, settings: Settings, index_service, model_service):
+    def __init__(
+        self, settings: Settings, index_service, model_service, session_factory
+    ):
         self.settings = settings
         self.index_service = index_service
         self.model_service = model_service
+        self.session_factory = session_factory
         self._slots = asyncio.Semaphore(1)
 
     @property
@@ -72,7 +75,6 @@ class RagService:
 
     async def answer(
         self,
-        session: AsyncSession,
         owner_id: UUID,
         project_id: UUID,
         question: str,
@@ -81,8 +83,7 @@ class RagService:
         streaming: bool = False,
     ) -> RagAnswerVO:
         # 越权请求必须在任何检索或模型调用之前被拒绝。
-        await require_document_project(session, owner_id, project_id)
-        documents = await list_ready_documents(session, project_id)
+        documents = await self.read_documents(owner_id, project_id)
         if not documents:
             return RagAnswerVO(
                 answer="项目中还没有已就绪的文档，请先到知识库上传资料并等待索引完成。",
@@ -112,8 +113,7 @@ class RagService:
                         min_score=self.settings.rag_min_score,
                     )
                     # 等待索引锁期间，文档可能被删除或改成不可用；发送给模型前再次检查。
-                    await require_document_project(session, owner_id, project_id)
-                    current = await list_ready_documents(session, project_id)
+                    current = await self.read_documents(owner_id, project_id)
                     sources = [
                         RagSourceVO(
                             source_id=i + 1,
@@ -140,8 +140,7 @@ class RagService:
                 async with trace(events, "validate_result"):
                     answer = build_answer(result, sources, self.settings.ai_mode)
                     # 模型调用期间已删除的资料不能再作为当前有效引用返回。
-                    await require_document_project(session, owner_id, project_id)
-                    latest = await list_ready_documents(session, project_id)
+                    latest = await self.read_documents(owner_id, project_id)
                     if any(source.document_id not in latest for source in sources):
                         raise ApiError(
                             409,
@@ -163,3 +162,8 @@ class RagService:
             ) from exc
         finally:
             self._slots.release()
+
+    async def read_documents(self, owner_id: UUID, project_id: UUID):
+        async with self.session_factory() as session:
+            await require_document_project(session, owner_id, project_id)
+            return await list_ready_documents(session, project_id)

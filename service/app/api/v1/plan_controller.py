@@ -36,11 +36,10 @@ async def planning_info(
 async def create_proposal(
     project_id: UUID,
     body: PlanRequestQO,
-    session: DatabaseSession,
     current_user: MemberUser,
     planner: PlanDependency,
 ):
-    return await planner.create(session, current_user.id, project_id, body.goal)
+    return await planner.create(current_user.id, project_id, body.goal)
 
 
 @router.post(
@@ -52,14 +51,14 @@ async def stream_proposal(
     project_id: UUID,
     body: PlanRequestQO,
     request: Request,
-    session: DatabaseSession,
     current_user: MemberUser,
     planner: PlanDependency,
 ):
-    await require_document_project(session, current_user.id, project_id)
+    async with planner.session_factory() as session:
+        await require_document_project(session, current_user.id, project_id)
     return stream_response(
         lambda events: planner.create(
-            session, current_user.id, project_id, body.goal, events=events
+            current_user.id, project_id, body.goal, events=events
         ),
         "planning",
         request.state.request_id,

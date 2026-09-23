@@ -38,11 +38,10 @@ async def workflow_info(
 async def run_workflow(
     project_id: UUID,
     body: WorkflowRequestQO,
-    session: DatabaseSession,
     current_user: MemberUser,
     workflow: WorkflowDependency,
 ):
-    return await workflow.run(session, current_user.id, project_id, body)
+    return await workflow.run(current_user.id, project_id, body)
 
 
 @router.post(
@@ -54,14 +53,13 @@ async def stream_workflow(
     project_id: UUID,
     body: WorkflowRequestQO,
     request: Request,
-    session: DatabaseSession,
     current_user: MemberUser,
     workflow: WorkflowDependency,
 ):
-    await require_document_project(session, current_user.id, project_id)
+    async with workflow.session_factory() as session:
+        await require_document_project(session, current_user.id, project_id)
     return stream_response(
         lambda events: workflow.run(
-            session,
             current_user.id,
             project_id,
             body,

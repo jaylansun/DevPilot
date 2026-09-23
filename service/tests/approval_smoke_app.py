@@ -8,7 +8,7 @@ from uuid import UUID, uuid4
 from app.api.error_handlers import register_error_handlers
 from app.api.v1 import router
 from app.config import get_settings
-from app.database import get_db_session
+from app.database import get_db_session, get_session_factory
 from app.middleware import request_id_middleware
 from app.models.document_do import DocumentDO, DocumentStatus
 from app.models.project_do import ProjectDO
@@ -18,6 +18,7 @@ from app.services.approval_service import ApprovalService
 from app.services.checkpoint_service import open_checkpointer
 from app.services.document_index_service import RetrievedChunk
 from app.services.plan_agent_service import PlanAgentService
+from app.services.plan_draft_service import PlanDraftService
 from app.services.plan_service import PlanService
 from fastapi import FastAPI
 from sqlalchemy import select
@@ -89,6 +90,9 @@ async def lifespan(app):
         app.state.approval_service = ApprovalService(
             factory, app.state.plan_service, saver
         )
+        app.state.plan_draft_service = PlanDraftService(
+            factory, app.state.plan_service, app.state.approval_service
+        )
         try:
             yield
         finally:
@@ -107,3 +111,5 @@ async def database():
 
 
 app.dependency_overrides[get_db_session] = database
+
+app.dependency_overrides[get_session_factory] = lambda: factory

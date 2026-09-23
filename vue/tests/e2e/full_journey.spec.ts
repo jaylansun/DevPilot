@@ -54,15 +54,26 @@ test("重启前：真实登录、建项目、上传索引、提问、需求检�
   await page.getByRole("button", { name: "开始检查", exact: true }).click();
   await expect(page.getByRole("region", { name: "依据与检查范围" })).toContainText(filename);
   await tab(page, "任务规划");
-  await page.getByRole("button", { name: "提交与审批", exact: true }).click();
   await page.getByLabel("你想完成什么目标？").fill("实现订单校验并补充验收测试");
-  await page.getByRole("button", { name: "生成并提交审批", exact: true }).click();
+  let generations = 0;
+  page.on("request", request => { if (request.url().endsWith("/planning/drafts/stream")) generations++; });
+  await page.getByRole("button", { name: "生成任务草案", exact: true }).click();
+  await page.getByRole("button", { name: "编辑草案", exact: true }).click();
+  await page.getByLabel("任务标题", { exact: true }).first().fill("成员确认的订单校验");
+  await page.getByRole("button", { name: "保存修改", exact: true }).click();
+  await expect(page.getByRole("region", { name: "草案编辑与送审" })).toContainText("第 2 版");
+  await page.reload();
+  await page.getByRole("button", { name: "打开草案：实现订单校验并补充验收测试", exact: true }).click();
+  await expect(page.getByRole("region", { name: "任务方案预览" })).toContainText("成员确认的订单校验");
+  await page.getByRole("button", { name: "提交这一版", exact: true }).click();
   const records = page.getByRole("region", { name: "持久规划与审批" });
   await expect(records.getByRole("status")).toHaveText("等待审批");
   const response = await page.request.get(`/api/v1/projects/${project}/conversations`, { headers: await headers(page) });
   expect(response.ok()).toBe(true);
   const conversations = await response.json();
   expect(conversations).toHaveLength(1);
+  expect(conversations[0].approval.plan.proposal.tasks[0].title).toBe("成员确认的订单校验");
+  expect(generations).toBe(1);
   writeFileSync(stateFile!, JSON.stringify({ project, approval: conversations[0].approval.id } satisfies Saved));
 });
 
@@ -75,7 +86,7 @@ test("重启后：索引和待审批保留、修改批准、幂等重试、看�
   await expect(page.getByRole("article", { name: filename, exact: true })).toContainText("已就绪");
   await ask(page); // 必须读到上一进程写入的真实 Chroma 数据。
   await tab(page, "任务规划");
-  await page.getByRole("button", { name: "提交与审批", exact: true }).click();
+  await page.getByRole("button", { name: "审批记录", exact: true }).click();
   const records = page.getByRole("region", { name: "持久规划与审批" });
   await expect(records.getByText("等待审批", { exact: true })).toBeVisible();
   const reviewerContext = await browser.newContext({ baseURL: new URL(page.url()).origin });
@@ -83,6 +94,7 @@ test("重启后：索引和待审批保留、修改批准、幂等重试、看�
   try {
     await login(reviewer, "reviewer");
     await reviewer.getByRole("button", { name: new RegExp(projectName) }).click();
+    await expect(reviewer.getByRole("region", { name: "审批方案详情" })).toContainText("成员确认的订单校验");
     await reviewer.getByRole("button", { name: "修改任务方案", exact: true }).click();
     await reviewer.getByLabel("任务标题", { exact: true }).first().fill("审核后的订单校验");
     await reviewer.getByRole("button", { name: "修改后批准并加入看板", exact: true }).click();
@@ -102,7 +114,7 @@ test("重启后：索引和待审批保留、修改批准、幂等重试、看�
     await expect(reviewer.getByText(/已创建 \d+ 项任务/)).toBeVisible();
   } finally { await reviewerContext.close(); }
   await page.reload();
-  await page.getByRole("button", { name: "提交与审批", exact: true }).click();
+  await page.getByRole("button", { name: "审批记录", exact: true }).click();
   await expect(records.getByText("已加入看板", { exact: true })).toBeVisible();
   await tab(page, "任务看板");
   await expect(page.getByText("审核后的订单校验", { exact: true })).toBeVisible();
@@ -121,7 +133,7 @@ test("再次重启：任务和执行结果持久化，删除文档后不再检�
   expect(tasks.total).toBe(saved.taskIds!.length);
   expect(tasks.items.map((task: { id: string }) => task.id).sort()).toEqual(saved.taskIds!.sort());
   await tab(page, "任务规划");
-  await page.getByRole("button", { name: "提交与审批", exact: true }).click();
+  await page.getByRole("button", { name: "审批记录", exact: true }).click();
   await expect(page.getByText("已加入看板", { exact: true })).toBeVisible();
   await tab(page, "知识库");
   await page.getByRole("button", { name: `删除文档 ${filename}`, exact: true }).click();

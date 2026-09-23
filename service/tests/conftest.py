@@ -7,6 +7,7 @@ from app.api.error_handlers import register_error_handlers
 from app.api.v1.approval_controller import router as approval_router
 from app.api.v1.document_controller import router as documents_router
 from app.api.v1.plan_controller import router as plan_router
+from app.api.v1.plan_draft_controller import router as draft_router
 from app.api.v1.project_controller import router as projects_router
 from app.api.v1.rag_controller import router as rag_router
 from app.api.v1.task_controller import router as tasks_router
@@ -50,6 +51,7 @@ def api_app_factory() -> Callable[[UserDO | None], FastAPI]:
         app.include_router(documents_router, prefix="/api/v1")
         app.include_router(rag_router, prefix="/api/v1")
         app.include_router(plan_router, prefix="/api/v1")
+        app.include_router(draft_router, prefix="/api/v1")
         app.include_router(workflow_router, prefix="/api/v1")
         app.include_router(approval_router, prefix="/api/v1")
 

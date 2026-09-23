@@ -2,10 +2,9 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
-from fastapi.testclient import TestClient
-
 from app.api.v1.rag_controller import get_rag_service
 from app.schemas.rag_vo import RagAnswerVO, RagInfoVO
+from fastapi.testclient import TestClient
 
 
 def test_rag_requires_member_and_login(api_app_factory, reviewer_user):
@@ -62,4 +61,4 @@ def test_rag_contract_and_server_side_identity(api_app_factory, member_user):
         result = client.post(base + "/questions", json={"question": "  订单规则？  "})
     assert result.status_code == 200
     assert result.json()["sources"] == []
-    assert service.answer.await_args.args[1:] == (member_user.id, project, "订单规则？")
+    assert service.answer.await_args.args == (member_user.id, project, "订单规则？")

@@ -1,21 +1,15 @@
-from typing import Annotated
+from fastapi import APIRouter, status
 
-from fastapi import APIRouter, Depends, status
-from sqlalchemy.ext.asyncio import AsyncSession
-
-from app.api.dependencies import CurrentUser
+from app.api.dependencies import CurrentUser, DatabaseSession
 from app.config import get_settings
-from app.database import get_db_session
 from app.errors import ApiError
 from app.schemas.auth_qo import LoginQO
 from app.schemas.auth_vo import TokenVO, UserVO
 from app.security import create_access_token
 from app.services.auth_service import authenticate_user
 
-
 router = APIRouter(tags=["认证"])
 settings = get_settings()
-DatabaseSession = Annotated[AsyncSession, Depends(get_db_session)]
 
 
 @router.get("/me", response_model=UserVO, summary="获取当前用户")

@@ -1,4 +1,4 @@
-import { finalResponse } from "./stream_helpers";
+import { finalResponse, savedDraft } from "./stream_helpers";
 import { expect, test, type Page } from "@playwright/test";
 
 const projectId = "11111111-1111-4111-8111-111111111111";
@@ -23,14 +23,16 @@ async function workspace(page: Page) {
     if (path.endsWith("/knowledge")) return route.fulfill({ json: { mode: "mock", configured: true, ready_documents: 3 } });
     if (path.endsWith("/knowledge/questions/stream")) return route.fulfill(finalResponse("knowledge", { mode: "mock", status: "answered", answer: "### 下单前需要确认三件事\n\n1. **配送信息**：收货人、手机号和配送地址。\n2. **商品库存**：提交前再次校验，避免超卖。\n3. **异常处理**：库存不足时保留购物车，提示调整数量。\n\n这些要求来自项目中的订单流程说明。[1]", sources: [source] }));
     if (path.endsWith("/planning")) return route.fulfill({ json: { mode: "mock", configured: true, ready_documents: 3, task_count: 2 } });
-    if (path.endsWith("/planning/proposals/stream")) return route.fulfill(finalResponse("planning", {
+    if (path.endsWith("/conversations")) return route.fulfill({ json: [] });
+    if (path.endsWith("/planning/drafts")) return route.fulfill({ json: { items: [], total: 0, offset: 0, limit: 20 } });
+    if (path.endsWith("/planning/drafts/stream")) return route.fulfill(finalResponse("draft", savedDraft(projectId, "完善下单流程", {
       mode: "mock", persisted: false, board_task_count: 2, sources: [source],
       tool_calls: [{ name: "search_documents", status: "success", item_count: 1 }, { name: "read_task_board", status: "success", item_count: 2 }],
       proposal: { summary: "先建立可靠的订单校验，再串联顾客下单流程。以可验证的验收标准控制交付范围。", assumptions: ["沿用现有登录与商品数据。"], risks: ["并发下单可能导致库存竞争，需要原子扣减。"], tasks: [
         { draft_id: "T1", title: "完善订单信息校验", description: "检查收货人、手机号与配送地址，给出清晰的错误提示。", priority: 1, acceptance_criteria: "信息缺失时阻止提交；补全有效信息后可继续下单。", dependencies: [], source_ids: [1] },
         { draft_id: "T2", title: "串联库存检查与下单", description: "提交前检查可售库存，保留失败时的购物车内容。", priority: 2, acceptance_criteria: "库存不足时显示原因，不产生无效订单。", dependencies: ["T1"], source_ids: [1] },
       ] },
-    }));
+    })));
     return route.fulfill({ status: 404, json: {} });
   });
 }

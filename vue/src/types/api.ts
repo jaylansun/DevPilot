@@ -32,3 +32,7 @@ export type ApprovalVO = components["schemas"]["ApprovalVO"];
 export type ApprovalPageVO = components["schemas"]["ApprovalPageVO"];
 export type ApprovalDecisionQO = components["schemas"]["ApprovalDecisionQO"];
 export type ConversationVO = components["schemas"]["ConversationVO"];
+export type PlanDraftVO = components["schemas"]["PlanDraftVO"];
+export type PlanDraftPageVO = components["schemas"]["PlanDraftPageVO"];
+export type DraftUpdateQO = components["schemas"]["DraftUpdateQO"];
+export type DraftSubmitQO = components["schemas"]["DraftSubmitQO"];

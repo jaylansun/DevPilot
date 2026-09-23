@@ -38,11 +38,10 @@ async def knowledge_info(
 async def ask_question(
     project_id: UUID,
     body: RagQuestionQO,
-    session: DatabaseSession,
     current_user: MemberUser,
     rag: RagDependency,
 ):
-    return await rag.answer(session, current_user.id, project_id, body.question)
+    return await rag.answer(current_user.id, project_id, body.question)
 
 
 @router.post(
@@ -54,14 +53,13 @@ async def stream_question(
     project_id: UUID,
     body: RagQuestionQO,
     request: Request,
-    session: DatabaseSession,
     current_user: MemberUser,
     rag: RagDependency,
 ):
-    await require_document_project(session, current_user.id, project_id)
+    async with rag.session_factory() as session:
+        await require_document_project(session, current_user.id, project_id)
     return stream_response(
         lambda events: rag.answer(
-            session,
             current_user.id,
             project_id,
             body.question,

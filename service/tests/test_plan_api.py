@@ -2,11 +2,10 @@ from unittest.mock import AsyncMock
 from uuid import uuid4
 
 import pytest
-from fastapi.testclient import TestClient
-from test_plan_schema import proposal_data
-
 from app.api.v1.plan_controller import get_plan_service
 from app.schemas.plan_vo import PlanInfoVO, PlanProposalVO, PlanResultVO
+from fastapi.testclient import TestClient
+from test_plan_schema import proposal_data
 
 
 def test_planning_requires_member(api_app_factory, reviewer_user):
@@ -63,4 +62,4 @@ def test_planning_contract_never_reports_persisted(api_app_factory, member_user)
     assert result.status_code == 200
     assert result.json()["persisted"] is False
     assert result.json()["proposal"]["tasks"][1]["dependencies"] == ["T1"]
-    assert planner.create.await_args.args[1:] == (member_user.id, project, "实现订单")
+    assert planner.create.await_args.args == (member_user.id, project, "实现订单")

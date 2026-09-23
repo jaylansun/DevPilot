@@ -74,8 +74,8 @@ describe("成员提交与恢复", () => {
     vi.mocked(api.runConversation).mockReturnValue(done.promise);
     mount(PlanningApprovals, { projectId: record.project_id, goal: "目标", disabled: false });
     await vi.waitFor(() => expect(root.textContent).toContain("生成中断，可继续"));
-    await click("继续生成并提交");
-    await click("继续生成并提交");
+    await click("继续处理");
+    await click("继续处理");
     expect(api.createConversation).not.toHaveBeenCalled();
     expect(api.runConversation).toHaveBeenCalledTimes(1);
     expect(api.runConversation).toHaveBeenCalledWith(record.id, expect.any(AbortSignal), expect.any(Function));
@@ -86,34 +86,34 @@ describe("成员提交与恢复", () => {
 
   it("生成超时保留会话和请求编号，重试继续原记录", async () => {
     const record = conversation();
-    vi.mocked(api.createConversation).mockResolvedValue(record);
+    vi.mocked(api.listConversations).mockResolvedValue([record]);
     vi.mocked(api.runConversation).mockRejectedValueOnce(new ApiError("任务规划超时", 504, "planning_timeout", "request-timeout"));
     mount(PlanningApprovals, { projectId: record.project_id, goal: "订单目标", disabled: false });
-    await nextTick();
+    await vi.waitFor(() => expect(root.textContent).toContain("继续处理"));
     vi.mocked(api.listConversations).mockResolvedValue([record]);
-    await click("生成并提交审批");
+    await click("继续处理");
     await vi.waitFor(() => expect(root.querySelector('[role="alert"]')?.textContent).toContain("request-timeout"));
     vi.mocked(api.runConversation).mockResolvedValue(approval());
-    await click("继续生成并提交");
+    await click("继续处理");
     await vi.waitFor(() => expect(root.querySelector('[role="status"]')?.textContent).toBe("等待审批"));
-    expect(api.createConversation).toHaveBeenCalledTimes(1);
+    expect(api.createConversation).not.toHaveBeenCalled();
     expect(api.runConversation).toHaveBeenCalledTimes(2);
   });
 
   it("停止等待取消请求并刷新记录，卸载后迟到结果不启动新的列表请求", async () => {
     const record = conversation();
-    vi.mocked(api.createConversation).mockResolvedValue(record);
+    vi.mocked(api.listConversations).mockResolvedValue([record]);
     vi.mocked(api.runConversation).mockImplementation((_id, signal) => new Promise((_, reject) => {
       signal.addEventListener("abort", () => reject(new DOMException("cancel", "AbortError")), { once: true });
     }));
     mount(PlanningApprovals, { projectId: record.project_id, goal: "目标", disabled: false });
-    await nextTick(); await click("生成并提交审批");
+    await vi.waitFor(() => expect(root.textContent).toContain("继续处理")); await click("继续处理");
     await vi.waitFor(() => expect(api.runConversation).toHaveBeenCalledTimes(1));
     await click("停止等待");
     await vi.waitFor(() => expect(root.textContent).toContain("请刷新后继续该记录"));
     const late = deferred<ApprovalVO>();
     vi.mocked(api.runConversation).mockReturnValueOnce(late.promise);
-    await click("生成并提交审批");
+    await click("继续处理");
     await vi.waitFor(() => expect(api.runConversation).toHaveBeenCalledTimes(2));
     const signal = vi.mocked(api.runConversation).mock.calls[1]![1];
     app!.unmount(); app = undefined;

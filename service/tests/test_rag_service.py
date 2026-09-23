@@ -116,14 +116,13 @@ async def rag_context(tmp_path):
 
 async def test_rag_two_steps_and_auth_scope(rag_context):
     factory, owner, project, doc, index, model = rag_context
-    rag = RagService(settings(), index, model)
-    async with factory.begin() as session:
-        with pytest.raises(ApiError) as error:
-            await rag.answer(session, uuid4(), project, "订单规则？")
-        assert error.value.status_code == 404
-        index.search.assert_not_called()
-        model.answer.assert_not_awaited()
-        result = await rag.answer(session, owner, project, "订单规则？")
+    rag = RagService(settings(), index, model, factory)
+    with pytest.raises(ApiError) as error:
+        await rag.answer(uuid4(), project, "订单规则？")
+    assert error.value.status_code == 404
+    index.search.assert_not_called()
+    model.answer.assert_not_awaited()
+    result = await rag.answer(owner, project, "订单规则？")
     assert result.sources[0].document_id == doc
     assert result.sources[0].filename == "订单规则.md"
     assert result.sources[0].text == "不能重复提交订单。"
@@ -145,10 +144,9 @@ async def test_only_ready_documents_can_be_used(rag_context, status):
     factory, owner, project, doc, index, model = rag_context
     async with factory.begin() as session:
         (await session.get(DocumentDO, doc)).status = status
-    async with factory.begin() as session:
-        result = await RagService(settings(), index, model).answer(
-            session, owner, project, "订单规则？"
-        )
+    result = await RagService(settings(), index, model, factory).answer(
+        owner, project, "订单规则？"
+    )
     assert result.status == "insufficient_evidence"
     index.search.assert_not_called()
     model.answer.assert_not_awaited()
@@ -157,10 +155,9 @@ async def test_only_ready_documents_can_be_used(rag_context, status):
 async def test_empty_retrieval_does_not_call_model(rag_context):
     factory, owner, project, _doc, index, model = rag_context
     index.search.return_value = []
-    async with factory.begin() as session:
-        result = await RagService(settings(), index, model).answer(
-            session, owner, project, "天气？"
-        )
+    result = await RagService(settings(), index, model, factory).answer(
+        owner, project, "天气？"
+    )
     assert result.status == "insufficient_evidence"
     assert result.sources == []
     model.answer.assert_not_awaited()
@@ -168,11 +165,11 @@ async def test_empty_retrieval_does_not_call_model(rag_context):
 
 async def test_live_requires_explicit_configuration(rag_context):
     factory, owner, project, _doc, index, model = rag_context
-    rag = RagService(settings(ai_mode="live"), index, model)
+    rag = RagService(settings(ai_mode="live"), index, model, factory)
     async with factory.begin() as session:
         assert not (await rag.info(session, owner, project)).configured
         with pytest.raises(ApiError) as error:
-            await rag.answer(session, owner, project, "订单规则？")
+            await rag.answer(owner, project, "订单规则？")
     assert error.value.code == "model_not_configured"
     index.search.assert_not_called()
 
@@ -187,10 +184,9 @@ async def test_live_requires_explicit_configuration(rag_context):
 async def test_errors_are_safe_and_release_capacity(rag_context, exception, code):
     factory, owner, project, _doc, index, model = rag_context
     model.answer.side_effect = exception
-    rag = RagService(settings(), index, model)
-    async with factory.begin() as session:
-        with pytest.raises(ApiError) as error:
-            await rag.answer(session, owner, project, "订单规则？")
+    rag = RagService(settings(), index, model, factory)
+    with pytest.raises(ApiError) as error:
+        await rag.answer(owner, project, "订单规则？")
     assert error.value.code == code
     assert "秘密" not in error.value.message
     assert rag._slots._value == 1
@@ -198,31 +194,29 @@ async def test_errors_are_safe_and_release_capacity(rag_context, exception, code
 
 async def test_deleted_document_during_answer_is_not_returned(rag_context):
     factory, owner, project, doc, index, model = rag_context
-    async with factory.begin() as session:
 
-        async def answer(*_, **_options):
+    async def answer(*_, **_options):
+        async with factory.begin() as session:
             (await session.get(DocumentDO, doc)).status = DocumentStatus.DELETING
-            await session.flush()
-            return GroundedAnswerVO(
-                answer="不能重复下单。[1]", source_ids=[1], insufficient_evidence=False
-            )
+        return GroundedAnswerVO(
+            answer="不能重复下单。[1]", source_ids=[1], insufficient_evidence=False
+        )
 
-        model.answer.side_effect = answer
-        with pytest.raises(ApiError) as error:
-            await RagService(settings(), index, model).answer(
-                session, owner, project, "订单规则？"
-            )
-        assert error.value.code == "knowledge_changed"
+    model.answer.side_effect = answer
+    with pytest.raises(ApiError) as error:
+        await RagService(settings(), index, model, factory).answer(
+            owner, project, "订单规则？"
+        )
+    assert error.value.code == "knowledge_changed"
 
 
 async def test_busy_worker_rejects_unbounded_queue(rag_context):
     factory, owner, project, _doc, index, model = rag_context
-    rag = RagService(settings(), index, model)
+    rag = RagService(settings(), index, model, factory)
     await rag._slots.acquire()
     try:
-        async with factory.begin() as session:
-            with pytest.raises(ApiError) as error:
-                await rag.answer(session, owner, project, "订单规则？")
+        with pytest.raises(ApiError) as error:
+            await rag.answer(owner, project, "订单规则？")
         assert error.value.code == "rag_busy"
         index.search.assert_not_called()
     finally:
@@ -238,13 +232,12 @@ async def test_cancelled_answer_releases_slot(rag_context):
         await asyncio.Event().wait()
 
     model.answer.side_effect = wait_forever
-    rag = RagService(settings(), index, model)
-    async with factory.begin() as session:
-        task = asyncio.create_task(rag.answer(session, owner, project, "订单规则？"))
-        await asyncio.wait_for(started.wait(), 3)
-        task.cancel()
-        with pytest.raises(asyncio.CancelledError):
-            await task
+    rag = RagService(settings(), index, model, factory)
+    task = asyncio.create_task(rag.answer(owner, project, "订单规则？"))
+    await asyncio.wait_for(started.wait(), 3)
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
     assert rag._slots._value == 1
 
 

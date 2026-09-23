@@ -2,20 +2,22 @@ from typing import Annotated
 
 from fastapi import Depends, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
-from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 
-from app.database import get_db_session
+from app.database import get_db_session, get_session_factory
 from app.errors import ApiError
 from app.models.user_do import UserDO, UserRole
 from app.repositories.user_repository import get_user_by_id
 from app.security import InvalidAccessTokenError, decode_access_token
 
-
 bearer_scheme = HTTPBearer(
     auto_error=False,
     description="请输入登录接口返回的 JWT 访问令牌",
 )
-DatabaseSession = Annotated[AsyncSession, Depends(get_db_session)]
+DatabaseSession = Annotated[AsyncSession, Depends(get_db_session, scope="function")]
+SessionFactory = Annotated[
+    async_sessionmaker[AsyncSession], Depends(get_session_factory)
+]
 BearerCredentials = Annotated[
     HTTPAuthorizationCredentials | None,
     Depends(bearer_scheme),
@@ -33,7 +35,7 @@ def unauthorized_error() -> ApiError:
 
 async def get_current_user(
     credentials: BearerCredentials,
-    session: DatabaseSession,
+    sessions: SessionFactory,
 ) -> UserDO:
     if credentials is None or credentials.scheme.casefold() != "bearer":
         raise unauthorized_error()
@@ -43,7 +45,9 @@ async def get_current_user(
     except InvalidAccessTokenError as exc:
         raise unauthorized_error() from exc
 
-    user = await get_user_by_id(session, user_id)
+    # 鉴权查询在此结束，不占用整个路由执行或流式响应的数据库连接。
+    async with sessions() as session:
+        user = await get_user_by_id(session, user_id)
     if user is None:
         raise unauthorized_error()
 

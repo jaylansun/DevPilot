@@ -56,7 +56,6 @@ class WorkflowService:
 
     async def run(
         self,
-        session: AsyncSession,
         owner_id: UUID,
         project_id: UUID,
         body: WorkflowRequestQO,
@@ -64,7 +63,8 @@ class WorkflowService:
         events: EventPublisher = NOOP_EVENTS,
         streaming: bool = False,
     ) -> WorkflowResultVO:
-        await require_document_project(session, owner_id, project_id)
+        async with self.session_factory() as session:
+            await require_document_project(session, owner_id, project_id)
         if not self.configured:
             raise ApiError(
                 503,

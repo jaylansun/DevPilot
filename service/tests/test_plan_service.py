@@ -3,13 +3,6 @@ from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
 import pytest
-from langchain.agents.middleware.model_call_limit import ModelCallLimitExceededError
-from langchain.agents.middleware.tool_call_limit import ToolCallLimitExceededError
-from langgraph.errors import GraphRecursionError
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-from test_plan_schema import proposal_data
-
 from app.config import Settings
 from app.database import Base
 from app.errors import ApiError
@@ -21,6 +14,12 @@ from app.schemas.plan_vo import PlanProposalVO
 from app.services.document_index_service import RetrievedChunk
 from app.services.plan_agent_service import PlanAgentService, build_planning_model
 from app.services.plan_service import PlanService
+from langchain.agents.middleware.model_call_limit import ModelCallLimitExceededError
+from langchain.agents.middleware.tool_call_limit import ToolCallLimitExceededError
+from langgraph.errors import GraphRecursionError
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from test_plan_schema import proposal_data
 
 
 def settings(**kwargs):
@@ -80,8 +79,16 @@ def test_settings_ignore_external_live_configuration(monkeypatch, overrides, exp
 @pytest.mark.parametrize(
     "model,base_url,expected",
     [
-        ("mimo-v2.5", "https://api.xiaomimimo.com/v1", {"thinking": {"type": "disabled"}}),
-        ("mimo-v2.5-pro", "https://api.xiaomimimo.com/v1/", {"thinking": {"type": "disabled"}}),
+        (
+            "mimo-v2.5",
+            "https://api.xiaomimimo.com/v1",
+            {"thinking": {"type": "disabled"}},
+        ),
+        (
+            "mimo-v2.5-pro",
+            "https://api.xiaomimimo.com/v1/",
+            {"thinking": {"type": "disabled"}},
+        ),
         ("fixture-model", "https://fixture.invalid/v1", None),
         ("mimo-v2.5", "https://fixture.invalid/v1", None),
         ("fixture-model", "https://api.xiaomimimo.com/v1", None),
@@ -153,8 +160,8 @@ async def test_mock_planning_reads_real_data_but_does_not_write(
     async with factory.begin() as session:
         info = await service.info(session, owner, project)
         assert info.configured and info.ready_documents == 1
-        first = await service.create(session, owner, project, "完善下单流程")
-        second = await service.create(session, owner, project, "完善下单流程")
+        first = await service.create(owner, project, "完善下单流程")
+        second = await service.create(owner, project, "完善下单流程")
         count = await session.scalar(select(func.count(TaskDO.id)))
     assert count == 0
     assert not first.persisted and not second.persisted
@@ -172,9 +179,8 @@ async def test_cross_project_denied_before_agent(planning_context):
     factory, _owner, project, _doc, index = planning_context
     agent = AsyncMock()
     service = PlanService(settings(), index, factory, agent)
-    async with factory.begin() as session:
-        with pytest.raises(ApiError) as error:
-            await service.create(session, uuid4(), project, "读取资料")
+    with pytest.raises(ApiError) as error:
+        await service.create(uuid4(), project, "读取资料")
     assert error.value.status_code == 404
     agent.generate.assert_not_awaited()
     index.search.assert_not_called()
@@ -186,13 +192,12 @@ async def test_no_documents_or_configuration_short_circuits(planning_context):
     service = PlanService(settings(ai_mode="live"), index, factory, agent)
     async with factory.begin() as session:
         with pytest.raises(ApiError) as error:
-            await service.create(session, owner, project, "目标")
+            await service.create(owner, project, "目标")
         assert error.value.code == "model_not_configured"
         (await session.get(DocumentDO, doc)).status = DocumentStatus.FAILED
-    async with factory.begin() as session:
-        with pytest.raises(ApiError) as error:
-            await service.create(session, owner, project, "目标")
-        assert error.value.code == "planning_no_documents"
+    with pytest.raises(ApiError) as error:
+        await service.create(owner, project, "目标")
+    assert error.value.code == "planning_no_documents"
     agent.generate.assert_not_awaited()
 
 
@@ -226,9 +231,8 @@ async def test_invalid_or_stale_plan_is_rejected(planning_context, case, expecte
     agent = AsyncMock()
     agent.generate.side_effect = generate
     service = PlanService(settings(), index, factory, agent)
-    async with factory.begin() as session:
-        with pytest.raises(ApiError) as error:
-            await service.create(session, owner, project, "目标")
+    with pytest.raises(ApiError) as error:
+        await service.create(owner, project, "目标")
     assert error.value.code == expected
     assert service._slots._value == 1
 
@@ -258,9 +262,8 @@ async def test_safe_errors_and_slot_release(planning_context, exception, code, c
     agent = AsyncMock()
     agent.generate.side_effect = exception
     service = PlanService(settings(), index, factory, agent)
-    async with factory.begin() as session:
-        with pytest.raises(ApiError) as error:
-            await service.create(session, owner, project, "目标")
+    with pytest.raises(ApiError) as error:
+        await service.create(owner, project, "目标")
     assert error.value.code == code
     assert "隐藏密钥" not in error.value.message + caplog.text
     if code == "planning_limit":
@@ -280,14 +283,12 @@ async def test_cancel_and_busy_are_bounded(planning_context):
     agent = AsyncMock()
     agent.generate.side_effect = wait
     service = PlanService(settings(), index, factory, agent)
-    async with factory.begin() as session:
-        task = asyncio.create_task(service.create(session, owner, project, "目标"))
-        await asyncio.wait_for(started.wait(), timeout=3)
-        async with factory.begin() as second_session:
-            with pytest.raises(ApiError) as error:
-                await service.create(second_session, owner, project, "另一个目标")
-            assert error.value.code == "planning_busy"
-        task.cancel()
-        with pytest.raises(asyncio.CancelledError):
-            await task
+    task = asyncio.create_task(service.create(owner, project, "目标"))
+    await asyncio.wait_for(started.wait(), timeout=3)
+    with pytest.raises(ApiError) as error:
+        await service.create(owner, project, "另一个目标")
+    assert error.value.code == "planning_busy"
+    task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await task
     assert service._slots._value == 1

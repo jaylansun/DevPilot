@@ -365,6 +365,75 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/projects/{project_id}/planning/drafts/stream": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+
+    post: operations["generate_draft_api_v1_projects__project_id__planning_drafts_stream_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/projects/{project_id}/planning/drafts": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+
+    get: operations["list_drafts_api_v1_projects__project_id__planning_drafts_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/projects/{project_id}/planning/drafts/{draft_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+
+    get: operations["get_draft_api_v1_projects__project_id__planning_drafts__draft_id__get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+
+    patch: operations["update_draft_api_v1_projects__project_id__planning_drafts__draft_id__patch"];
+    trace?: never;
+  };
+  "/api/v1/projects/{project_id}/planning/drafts/{draft_id}/submit/stream": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+
+    post: operations["submit_draft_api_v1_projects__project_id__planning_drafts__draft_id__submit_stream_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/projects/{project_id}/assistant": {
     parameters: {
       query?: never;
@@ -581,6 +650,17 @@ export interface components {
       updated_at: string;
     };
 
+    DraftSubmitQO: {
+
+      version: number;
+    };
+
+    DraftUpdateQO: {
+
+      version: number;
+      proposal: components["schemas"]["PlanProposalVO"];
+    };
+
     GapReportVO: {
 
       summary: string;
@@ -617,6 +697,37 @@ export interface components {
       username: string;
 
       password: string;
+    };
+
+    PlanDraftPageVO: {
+
+      items: components["schemas"]["PlanDraftVO"][];
+
+      total: number;
+
+      offset: number;
+
+      limit: number;
+    };
+
+    PlanDraftVO: {
+
+      id: string;
+
+      project_id: string;
+
+      goal: string;
+      plan: components["schemas"]["PlanResultVO"];
+
+      version: number;
+
+      status: "draft" | "submitted";
+
+      conversation_id: string | null;
+
+      created_at: string;
+
+      updated_at: string;
     };
 
     PlanInfoVO: {
@@ -657,7 +768,7 @@ export interface components {
 
       board_task_count: number;
 
-      persisted: false;
+      persisted: boolean;
     };
 
     ProjectCreateQO: {
@@ -1901,6 +2012,179 @@ export interface operations {
     requestBody: {
       content: {
         "application/json": components["schemas"]["PlanRequestQO"];
+      };
+    };
+    responses: {
+
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/x-ndjson": string;
+        };
+      };
+
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  generate_draft_api_v1_projects__project_id__planning_drafts_stream_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        project_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["PlanRequestQO"];
+      };
+    };
+    responses: {
+
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/x-ndjson": string;
+        };
+      };
+
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  list_drafts_api_v1_projects__project_id__planning_drafts_get: {
+    parameters: {
+      query?: {
+        offset?: number;
+        limit?: number;
+      };
+      header?: never;
+      path: {
+        project_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PlanDraftPageVO"];
+        };
+      };
+
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  get_draft_api_v1_projects__project_id__planning_drafts__draft_id__get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        project_id: string;
+        draft_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PlanDraftVO"];
+        };
+      };
+
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  update_draft_api_v1_projects__project_id__planning_drafts__draft_id__patch: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        project_id: string;
+        draft_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["DraftUpdateQO"];
+      };
+    };
+    responses: {
+
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["PlanDraftVO"];
+        };
+      };
+
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  submit_draft_api_v1_projects__project_id__planning_drafts__draft_id__submit_stream_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        project_id: string;
+        draft_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["DraftSubmitQO"];
       };
     };
     responses: {

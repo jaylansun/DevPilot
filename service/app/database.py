@@ -35,7 +35,7 @@ AsyncSessionFactory = async_sessionmaker(
 
 
 async def get_db_session() -> AsyncIterator[AsyncSession]:
-    """为一次 FastAPI 请求提供自动提交或回滚的事务会话。"""
+    """普通接口事务；必须通过 function scope 在响应发送前完成提交。"""
 
     async with AsyncSessionFactory() as session:
         try:
@@ -44,6 +44,11 @@ async def get_db_session() -> AsyncIterator[AsyncSession]:
         except Exception:
             await session.rollback()
             raise
+
+
+def get_session_factory():
+    """短会话由调用者持有，不能跨模型调用或流式发送共享。"""
+    return AsyncSessionFactory
 
 
 async def close_database() -> None:

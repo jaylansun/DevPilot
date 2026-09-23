@@ -13,9 +13,11 @@ from sqlalchemy.exc import IntegrityError
 from app.errors import ApiError
 from app.models.approval_do import ApprovalDO, ConversationDO
 from app.models.document_do import DocumentDO, DocumentStatus
+from app.models.plan_draft_do import PlanDraftDO
 from app.models.project_do import ProjectDO
 from app.models.task_do import TaskDO, TaskSource, TaskStatus
 from app.models.user_do import UserDO, UserRole
+from app.repositories.project_repository import get_owned_project
 from app.schemas.approval_qo import ApprovalDecisionQO
 from app.schemas.approval_vo import ApprovalPageVO, ApprovalVO, ConversationVO
 from app.schemas.plan_vo import PlanProposalVO, PlanResultVO, normalize_task_title
@@ -176,14 +178,12 @@ class ApprovalService:
             )
 
     async def generate(self, context: ApprovalContext, goal: str):
-        async with self.sessions() as session:
-            return await self.planner.create(
-                session,
-                context.owner_id,
-                context.project_id,
-                goal,
-                events=context.events,
-            )
+        return await self.planner.create(
+            context.owner_id,
+            context.project_id,
+            goal,
+            events=context.events,
+        )
 
     async def document_hashes(self, session, project_id, plan):
         ids = {source.document_id for source in plan.sources}
@@ -207,13 +207,26 @@ class ApprovalService:
     async def record_submission(self, context: ApprovalContext, data: dict):
         plan = PlanResultVO.model_validate(data)
         async with self.sessions.begin() as session:
-            await require_document_project(
-                session, context.owner_id, context.project_id
-            )
+            if (
+                await get_owned_project(
+                    session, context.project_id, context.owner_id, lock=True
+                )
+                is None
+            ):
+                raise ApiError(404, "project_not_found", "项目不存在")
             existing = await session.get(ApprovalDO, context.conversation_id)
             if existing:
                 return existing
             hashes = await self.document_hashes(session, context.project_id, plan)
+            draft = await session.scalar(
+                select(PlanDraftDO).where(
+                    PlanDraftDO.conversation_id == context.conversation_id
+                )
+            )
+            if draft and hashes != draft.document_hashes:
+                raise ApiError(
+                    409, "draft_documents_changed", "引用的资料已变化，请重新生成草案"
+                )
             approval = ApprovalDO(
                 id=context.conversation_id,
                 conversation_id=context.conversation_id,
@@ -237,12 +250,23 @@ class ApprovalService:
                 existing = await session.get(ApprovalDO, conversation_id)
                 if existing and existing.status != "pending":
                     return await self.approval_view(session, existing)
+                # 草案已由服务端校验、保存并冻结；直接送审不能再次生成。
+                draft = await session.scalar(
+                    select(PlanDraftDO).where(
+                        PlanDraftDO.conversation_id == conversation.id
+                    )
+                )
+                initial = {"goal": conversation.goal}
+                if draft:
+                    initial["plan"] = draft.plan
+                elif existing:
+                    initial["plan"] = existing.plan
             config = self.config(conversation)
             snapshot = await self.graph.aget_state(config)
             # 请求中断后用同一 thread 继续，不重复生成已保存的方案。
             if not any(task.interrupts for task in snapshot.tasks):
                 await self.graph.ainvoke(
-                    None if snapshot.values else {"goal": conversation.goal},
+                    None if snapshot.values else initial,
                     config=config,
                     durability="sync",
                     context=ApprovalContext(
@@ -264,17 +288,17 @@ class ApprovalService:
             raise ApiError(
                 422, "invalid_approval_sources", "修改后的任务引用了无效资料"
             )
-        hashes = await self.document_hashes(session, conversation.project_id, plan)
-        if hashes != approval.document_hashes:
-            raise ApiError(
-                409, "approval_documents_changed", "资料内容已变化，请重新规划"
-            )
         # 锁定项目，串行化多个审批向同一项目写入任务。
         await session.scalar(
             select(ProjectDO)
             .where(ProjectDO.id == conversation.project_id)
             .with_for_update()
         )
+        hashes = await self.document_hashes(session, conversation.project_id, plan)
+        if hashes != approval.document_hashes:
+            raise ApiError(
+                409, "approval_documents_changed", "资料内容已变化，请重新规划"
+            )
         titles = await session.scalars(
             select(TaskDO.title).where(TaskDO.project_id == conversation.project_id)
         )

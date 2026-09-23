@@ -40,6 +40,16 @@ export function parseStreamEvent(line: string): StreamEvent {
         if (!validApproval(result)) throw invalid();
         break;
       }
+      if (event.kind === "draft") {
+        if (!object(result) || typeof result.id !== "string" || typeof result.project_id !== "string" ||
+            typeof result.goal !== "string" || !Number.isSafeInteger(result.version) || (result.version as number) < 1 ||
+            !["draft", "submitted"].includes(result.status as string) ||
+            !(result.conversation_id === null || typeof result.conversation_id === "string") ||
+            !object(result.plan) || result.plan.persisted !== true ||
+            !["mock", "live"].includes(result.plan.mode as string) || !Array.isArray(result.plan.sources) ||
+            !object(result.plan.proposal) || !Array.isArray(result.plan.proposal.tasks)) throw invalid();
+        break;
+      }
       if (!object(result) || !["mock", "live"].includes(result.mode as string) || !Array.isArray(result.sources)) throw invalid();
       if (event.kind === "knowledge") {
         if (typeof result.answer !== "string" || !["answered", "insufficient_evidence"].includes(result.status as string)) throw invalid();
@@ -109,7 +119,7 @@ export function streamRequest<K extends RunKind>(
   return request<Results[K]>(path, {
     method: "POST", body, signal,
     // 规划服务 120 秒，流式收尾 130 秒；浏览器留出传输时间，避免提前掐断。
-    timeoutMs: kind === "planning" || kind === "approval" ? 140_000 : 75_000,
+    timeoutMs: kind === "planning" || kind === "approval" || kind === "draft" ? 140_000 : 75_000,
     accept: "application/x-ndjson",
     readResponse: (response, combinedSignal) => readNDJSON(response, kind, onEvent, combinedSignal),
   });

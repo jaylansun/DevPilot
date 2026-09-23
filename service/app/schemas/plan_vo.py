@@ -106,4 +106,4 @@ class PlanResultVO(BaseModel):
     sources: list[RagSourceVO]
     tool_calls: list[ToolCallVO]
     board_task_count: int = Field(ge=0)
-    persisted: Literal[False] = False
+    persisted: bool = False

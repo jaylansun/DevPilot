@@ -94,16 +94,14 @@ async def run(
     events=NOOP_EVENTS,
     streaming=False,
 ):
-    factory, user, project, *_ = context
-    async with factory() as session:
-        return await service.run(
-            session,
-            owner or user,
-            project,
-            WorkflowRequestQO(message=message, intent=intent),
-            events=events,
-            streaming=streaming,
-        )
+    _factory, user, project, *_ = context
+    return await service.run(
+        owner or user,
+        project,
+        WorkflowRequestQO(message=message, intent=intent),
+        events=events,
+        streaming=streaming,
+    )
 
 
 @pytest.mark.parametrize(
@@ -159,7 +157,7 @@ async def test_explicit_intent_overrides_classification(planning_context):
 
 
 async def test_parallel_nodes_finish_before_report(planning_context, monkeypatch):
-    factory, owner, project, _doc, task_id, index, _engine = planning_context
+    _factory, _owner, _project, _doc, task_id, index, _engine = planning_context
     started, board_finished = threading.Event(), threading.Event()
     original = PlanningReadService.read_task_board
 

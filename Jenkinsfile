@@ -117,7 +117,8 @@ pipeline {
 
         stage('部署服务') {
             steps {
-                sh 'docker compose -p devpilot up -d --no-deps api web'
+                // 一起重建 API 和 Nginx，更新容器地址后重新解析反向代理上游。
+                sh 'docker compose -p devpilot up -d --no-deps --force-recreate --wait --wait-timeout 180 api web'
                 sh 'docker compose -p devpilot ps api web'
             }
         }

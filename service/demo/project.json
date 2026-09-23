@@ -1,0 +1,22 @@
+{
+  "name": "餐厅外卖网站 · 演示",
+  "description": "顾客在线点餐、餐厅接单。首版使用模拟支付，重点验证订单校验、库存一致性和重复提交保护。详细规则见知识库 restaurant.md。",
+  "tasks": [
+    {
+      "key": "customer-session",
+      "title": "实现顾客登录与会话保持",
+      "description": "顾客登录后可访问受保护的下单页面，刷新保持登录，退出后旧会话不可用。",
+      "priority": 2,
+      "status": "done",
+      "acceptance_criteria": "未登录时跳转登录页；刷新页面后仍能访问；退出后不能继续下单。"
+    },
+    {
+      "key": "menu-list",
+      "title": "实现菜品列表与分类筛选",
+      "description": "展示已上架菜品、价格与库存，支持分类筛选。",
+      "priority": 2,
+      "status": "in_progress",
+      "acceptance_criteria": "切换分类只展示该分类的上架菜品；下架菜品不能加入购物车。"
+    }
+  ]
+}

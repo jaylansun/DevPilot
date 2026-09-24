@@ -1,12 +1,12 @@
 import json
 from contextlib import aclosing
-from urllib.parse import urlsplit
 
 from langchain_core.prompts import ChatPromptTemplate
 
 from app.config import Settings
 from app.errors import ApiError
 from app.schemas.rag_vo import GroundedAnswerVO, RagSourceVO
+from app.services.model_compat import structured_output_extra_body
 from app.services.run_events import NOOP_EVENTS, EventPublisher
 
 SYSTEM_PROMPT = """你是项目知识库问答助手。只能依据本次提供的资料用中文回答。
@@ -54,6 +54,7 @@ class RagModelService:
                 timeout=30,
                 max_retries=1,
                 max_tokens=1200,
+                extra_body=structured_output_extra_body(self.settings),
             )
             prompt = ChatPromptTemplate.from_messages(
                 [
@@ -83,12 +84,6 @@ class RagModelService:
         if self._stream_chain is None:
             from langchain_openai import ChatOpenAI
 
-            mimo = urlsplit(
-                self.settings.llm_base_url
-            ).hostname == "api.xiaomimimo.com" and self.settings.model_name in {
-                "mimo-v2.5",
-                "mimo-v2.5-pro",
-            }
             model = ChatOpenAI(
                 model=self.settings.model_name,
                 api_key=self.settings.llm_api_key.get_secret_value(),
@@ -97,7 +92,7 @@ class RagModelService:
                 timeout=30,
                 max_retries=0,
                 max_tokens=1200,
-                extra_body={"thinking": {"type": "disabled"}} if mimo else None,
+                extra_body=structured_output_extra_body(self.settings),
             )
             prompt = ChatPromptTemplate.from_messages(
                 [

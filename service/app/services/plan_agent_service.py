@@ -1,6 +1,5 @@
 import json
 from collections import Counter
-from urllib.parse import urlsplit
 
 from httpx import TransportError
 from langchain.agents import create_agent
@@ -19,6 +18,7 @@ from langchain_openai import ChatOpenAI
 from app.config import Settings
 from app.errors import ApiError
 from app.schemas.plan_vo import PlanProposalVO, TaskDraftVO, normalize_task_title
+from app.services.model_compat import structured_output_extra_body
 from app.services.plan_validation import plan_repair_feedback
 from app.services.run_events import trace
 from app.tools.planning_tools import PLANNING_TOOLS, PlanToolContext
@@ -196,14 +196,6 @@ def build_planning_agent(model):
 
 
 def build_planning_model(settings: Settings):
-    # MiMo 官方建议工具调用关闭深度思考，避免推理挤占本流程的输出预算与时限。
-    # 仅适配明确支持此参数的官方接口，其他 OpenAI 兼容供应商保持原配置。
-    mimo = urlsplit(
-        settings.llm_base_url
-    ).hostname == "api.xiaomimimo.com" and settings.model_name in {
-        "mimo-v2.5",
-        "mimo-v2.5-pro",
-    }
     return ChatOpenAI(
         model=settings.model_name,
         api_key=settings.llm_api_key.get_secret_value(),
@@ -212,7 +204,7 @@ def build_planning_model(settings: Settings):
         timeout=25,
         max_retries=0,
         max_tokens=5000,
-        extra_body={"thinking": {"type": "disabled"}} if mimo else None,
+        extra_body=structured_output_extra_body(settings),
     )
 
 

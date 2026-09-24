@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from time import monotonic
 from uuid import UUID
 
 from langgraph.errors import GraphRecursionError
@@ -16,6 +17,7 @@ from app.schemas.workflow_vo import WorkflowInfoVO, WorkflowResultVO
 from app.services.document_service import require_document_project
 from app.services.planning_read_service import PlanningReadService
 from app.services.run_events import NOOP_EVENTS, EventPublisher
+from app.services.run_limits import WORKFLOW_TIMEOUT_SECONDS
 from app.services.workflow_graph import WorkflowContext, WorkflowGraph
 
 logger = logging.getLogger(__name__)
@@ -77,8 +79,9 @@ class WorkflowService:
             raise ApiError(
                 503, "workflow_busy", "当前正在处理其他检查，请稍后重试"
             ) from exc
+        started = monotonic()
         try:
-            async with asyncio.timeout(65):
+            async with asyncio.timeout(WORKFLOW_TIMEOUT_SECONDS):
                 documents = PlanningReadService(
                     self.session_factory,
                     self.index_service,
@@ -115,8 +118,18 @@ class WorkflowService:
                 ) from exc
             raise
         except (TimeoutError, APITimeoutError) as exc:
+            details = {
+                "timeout_kind": "model_request"
+                if isinstance(exc, APITimeoutError)
+                else "workflow_deadline",
+                "elapsed_seconds": round(monotonic() - started, 2),
+            }
+            logger.warning("项目只读流程超时；诊断=%s", details)
             raise ApiError(
-                504, "workflow_timeout", "处理超时，请缩小范围后重试"
+                504,
+                "workflow_timeout",
+                "处理超时，请缩小范围后重试",
+                details=details,
             ) from exc
         except (ValidationError, GraphRecursionError) as exc:
             raise ApiError(

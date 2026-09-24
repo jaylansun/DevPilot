@@ -128,13 +128,24 @@ async def test_live_prompt_keeps_untrusted_document_in_data_and_uses_bounded_mod
     assert captured["timeout"] == 30
 
 
-async def test_openai_compatible_wire_contract_without_external_requests(monkeypatch):
+@pytest.mark.parametrize(
+    "model,base_url,thinking",
+    [
+        ("synthetic-model", "https://example.invalid/v1", None),
+        ("mimo-v2.5", "https://api.xiaomimimo.com/v1", {"type": "disabled"}),
+        ("mimo-v2.5-pro", "https://api.xiaomimimo.com/v1", {"type": "disabled"}),
+    ],
+)
+async def test_openai_compatible_wire_contract_without_external_requests(
+    monkeypatch, model, base_url, thinking
+):
     from langchain_openai import ChatOpenAI
 
     def respond(request):
         body = json.loads(request.content)
         assert not body.get("stream", False)
-        assert body["model"] == "synthetic-model"
+        assert body["model"] == model
+        assert body.get("thinking") == thinking
         assert body["tools"][0]["function"]["name"] == "GroundedAnswerVO"
         assert request.headers["authorization"] == "Bearer synthetic-test-key"
         return httpx.Response(
@@ -185,9 +196,9 @@ async def test_openai_compatible_wire_contract_without_external_requests(monkeyp
         )
         config = configuration(
             ai_mode="live",
-            model_name="synthetic-model",
+            model_name=model,
             llm_api_key="synthetic-test-key",
-            llm_base_url="https://example.invalid/v1",
+            llm_base_url=base_url,
         )
         source = RagSourceVO(
             source_id=1,
@@ -197,6 +208,7 @@ async def test_openai_compatible_wire_contract_without_external_requests(monkeyp
             heading="订单",
             text="不能重复下单。",
         )
+
         class UnexpectedTokens:
             async def emit(self, event_type, **data):
                 pytest.fail("显式提供发送器不应自动启用模型流式调用")

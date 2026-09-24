@@ -68,7 +68,7 @@
 
 `planning_limit` 表示本次规划没有在限定步骤内结束，并非模型账号余额或套餐额度不足。服务端仅记录对应异常类型和调用计数，帮助区分模型次数、工具次数与图步数限制，不记录用户目标、原文或密钥。
 
-对于官方 `api.xiaomimimo.com` 接口的 `mimo-v2.5` / `mimo-v2.5-pro`，任务规划按 [MiMo 官方工具调用建议](https://mimo.mi.com/docs/en-US/quick-start/faq/api-integration) 显式设置 `thinking.type=disabled`，避免默认深度思考占用本流程的时限和输出预算。该适配只作用于任务规划，不改变其他供应商的请求参数，也不修改部署环境变量。
+对于官方 `api.xiaomimimo.com` 接口的 `mimo-v2.5` / `mimo-v2.5-pro`，任务规划按 [MiMo 官方工具调用建议](https://mimo.mi.com/docs/en-US/quick-start/faq/api-integration) 显式设置 `thinking.type=disabled`，避免默认深度思考占用本流程的时限和输出预算。该适配通过 `model_compat.py` 与需求检查、普通及流式问答共享，不改变其他供应商的请求参数，也不修改部署环境变量。
 
 提示词默认优先生成下一阶段的 3～5 个重点任务，并要求简明的说明和验收标准，避免把宽泛目标扩展成整套项目的长篇方案。这是生成指导，返回结果仍按原来的 1～12 项结构约束严格校验。
 

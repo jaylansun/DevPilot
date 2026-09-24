@@ -1,11 +1,16 @@
 import asyncio
 import json
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, Mock
 
+import httpx
 import pytest
+from app.errors import ApiError
 from app.schemas.workflow_vo import TaskLookupVO
 from app.services.planning_read_service import PlanningReadService
 from app.services.run_stream_service import StreamRunner
+from app.services.workflow_model_service import WorkflowModelService
+from openai import APITimeoutError
+from test_plan_service import settings
 from test_planning_tools import planning_context as _planning_context
 from test_workflow import build_service, run
 
@@ -75,3 +80,59 @@ async def test_parallel_graph_cancels_remaining_branch_without_generating_report
 
 async def _collect(stream):
     return [json.loads(line) async for line in stream]
+
+
+async def test_report_timeout_identifies_stage_and_request_without_sensitive_data(
+    planning_context, caplog
+):
+    model = WorkflowModelService(settings(ai_mode="live"))
+    model._model = Mock()
+    model._model.with_structured_output.return_value.ainvoke = AsyncMock(
+        side_effect=APITimeoutError(
+            request=httpx.Request("POST", "https://fixture.invalid/private-api-key")
+        )
+    )
+    service = build_service(planning_context, live=True, model=model)
+    runner = StreamRunner(
+        lambda events: run(
+            planning_context, service, intent="requirement_check", events=events
+        ),
+        "workflow",
+        "workflow-timeout-request",
+    )
+    events = await _collect(runner.stream())
+    assert events[-1]["type"] == "error"
+    assert events[-1]["error"]["code"] == "workflow_timeout"
+    assert "需求报告生成超时" in events[-1]["error"]["message"]
+    assert events[-1]["error"]["details"] is None
+    assert ("generate_report", "failed") in [
+        (e.get("name"), e.get("status")) for e in events
+    ]
+    assert not any(e["type"] == "final" for e in events)
+    assert "workflow-timeout-request" in caplog.text
+    assert "generate_report" in caplog.text and "model_request" in caplog.text
+    assert "private-api-key" not in caplog.text + json.dumps(events)
+    assert service._slots._value == 1
+
+
+async def test_workflow_deadline_still_cancels_model_and_releases_slot(
+    planning_context, monkeypatch, caplog
+):
+    cancelled = asyncio.Event()
+
+    async def stalled(*_args):
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cancelled.set()
+
+    model = AsyncMock()
+    model.classify.side_effect = stalled
+    service = build_service(planning_context, live=True, model=model)
+    monkeypatch.setattr("app.services.workflow_service.WORKFLOW_TIMEOUT_SECONDS", 0.5)
+    with pytest.raises(ApiError) as error:
+        await asyncio.wait_for(run(planning_context, service), 3)
+    assert error.value.code == "workflow_timeout"
+    assert error.value.details["timeout_kind"] == "workflow_deadline"
+    assert "workflow_deadline" in caplog.text
+    assert cancelled.is_set() and service._slots._value == 1

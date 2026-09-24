@@ -61,6 +61,12 @@ class StreamRunner:
                         code,
                         exc.details,
                     )
+                elif code == "workflow_timeout":
+                    logger.warning(
+                        "需求检查超时；请求 ID=%s；诊断=%s",
+                        self._channel.request_id,
+                        exc.details,
+                    )
             elif isinstance(exc, TimeoutError):
                 status, code, message = 504, "stream_timeout", "处理超时，请重试"
             else:

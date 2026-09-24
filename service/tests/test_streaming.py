@@ -345,7 +345,16 @@ async def test_real_graph_stream_respects_parallel_join(planning_context):
     assert events[-1]["type"] == "final"
 
 
-async def test_model_uses_actual_provider_chunks_before_final_validation(monkeypatch):
+@pytest.mark.parametrize(
+    "model_name,base_url,thinking",
+    [
+        ("fixture", "https://fixture.invalid/v1", None),
+        ("mimo-v2.5", "https://api.xiaomimimo.com/v1", {"type": "disabled"}),
+    ],
+)
+async def test_model_uses_actual_provider_chunks_before_final_validation(
+    monkeypatch, model_name, base_url, thinking
+):
     from langchain_openai import ChatOpenAI
 
     gate = asyncio.Event()
@@ -400,6 +409,7 @@ async def test_model_uses_actual_provider_chunks_before_final_validation(monkeyp
     def respond(request):
         payload = json.loads(request.content)
         assert payload["stream"] is True
+        assert payload.get("thinking") == thinking
         return httpx.Response(
             200, headers={"content-type": "text/event-stream"}, stream=Body()
         )
@@ -412,9 +422,9 @@ async def test_model_uses_actual_provider_chunks_before_final_validation(monkeyp
         model = RagModelService(
             configuration(
                 ai_mode="live",
-                model_name="fixture",
+                model_name=model_name,
                 llm_api_key="fixture",
-                llm_base_url="https://fixture.invalid/v1",
+                llm_base_url=base_url,
             )
         )
 

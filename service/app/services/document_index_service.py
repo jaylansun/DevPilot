@@ -5,6 +5,8 @@ from pathlib import Path
 from threading import RLock
 from uuid import UUID
 
+from app.services.chroma_compat import load_chroma_bindings
+
 MODEL_NAME = "BAAI/bge-small-zh-v1.5"
 
 
@@ -80,6 +82,7 @@ class DocumentIndexService:
     @property
     def collection(self):
         if self._collection is None:
+            load_chroma_bindings()
             import chromadb
             from chromadb.config import Settings
 

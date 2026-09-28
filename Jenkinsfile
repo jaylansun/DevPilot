@@ -53,10 +53,11 @@ pipeline {
                         returnStdout: true
                     ).trim()
                     if (env.DOCKER_BUILD_PROXY) {
-                        echo '已读取 Jenkins Git 代理，镜像构建将使用相同代理'
+                        echo '已读取 Jenkins Git 代理，构建中的依赖安装将使用相同代理'
                     } else {
-                        echo '未配置 Jenkins Git 代理，镜像构建将直接访问网络'
+                        echo '未配置 Jenkins Git 代理，不额外注入依赖安装代理'
                     }
+                    echo '基础镜像访问 Docker Hub 使用 Docker 引擎/OrbStack 自身的网络与代理配置'
                 }
             }
         }
@@ -77,7 +78,8 @@ pipeline {
                     else
                         set --
                     fi
-                    docker build "$@" \
+                    bash scripts/docker_build_retry.sh docker build "$@" \
+                        --progress=plain \
                         --build-context stream_contract=vue/src/types \
                         --target test \
                         --tag "devpilot-api-test:${BUILD_NUMBER}" \
@@ -110,7 +112,8 @@ pipeline {
                     else
                         set --
                     fi
-                    docker compose -p devpilot build "$@" api web
+                    bash scripts/docker_build_retry.sh \
+                        docker compose --progress plain -p devpilot build "$@" api web
                 '''
             }
         }

@@ -110,6 +110,16 @@ docker compose -f docker-compose.yml logs --tail=80 api web
 | 生成超时/中断 | 缩小目标范围；已保存的规划使用“继续生成并提交”，避免重复新建会话 |
 | 审批显示待恢复执行 | 原审批人进入该状态，继续已保存的决定；重复执行不会重复创建任务 |
 
+Jenkins 的测试镜像构建与 API/Web 镜像构建通过 `scripts/docker_build_retry.sh` 处理镜像仓库的临时网络错误：最多尝试 3 次，重试前分别等待 5 秒和 10 秒，构建日志实时输出并保留失败退出码。只在基础镜像元数据或认证令牌请求出现 TLS 握手超时、EOF、连接重置、临时网关/服务端错误时重试。编译、测试、认证拒绝、标签不存在、限流与取消会直接停止；部署仍须在测试和镜像构建成功后执行。
+
+构建参数 `HTTP_PROXY` / `HTTPS_PROXY` 供镜像内部安装依赖使用，拉取 `FROM` 基础镜像使用 Docker 引擎自己的网络配置，参见 [Docker 代理说明](https://docs.docker.com/engine/cli/proxy/)。OrbStack 默认跟随 macOS 代理，也可在 [OrbStack 网络设置](https://docs.orbstack.dev/docker/network#proxies)中单独配置。连续重试失败时，应先检查这一链路；代码中的重试不能修复持续不可用的代理。
+
+本地验证重试规则（只使用模拟命令，不访问镜像仓库）：
+
+```bash
+python3 -m unittest discover -s scripts/tests -p test_docker_build_retry.py -v
+```
+
 ## 完整演示
 
 照着[第十四天录屏脚本](day14-recording-script.md)操作，覆盖登录、创建项目、上传、问答、检查、规划、审批、任务列表与重启恢复。它是操作和讲解脚本，不是已经录制的视频。

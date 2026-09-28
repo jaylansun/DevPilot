@@ -3,7 +3,6 @@ import sys
 from uuid import uuid4
 
 import numpy as np
-
 from app.services.document_index_service import DocumentIndexService, split_document
 
 
@@ -46,10 +45,16 @@ def test_chroma_persists_isolates_projects_and_retry_is_idempotent(tmp_path):
         [
             sys.executable,
             "-c",
-            "import sys; from pathlib import Path; "
-            "from app.services.document_index_service import DocumentIndexService; "
-            "index = DocumentIndexService(Path(sys.argv[1])); "
-            "assert len(index.collection.get(where={'document_id': sys.argv[2]})['ids']) == int(sys.argv[3])",
+            (
+                "import faulthandler, os, sys; from pathlib import Path; "
+                "faulthandler.dump_traceback_later(25); "
+                "affinity = os.sched_getaffinity(0) if hasattr(os, 'sched_getaffinity') else None; "
+                "from app.services.document_index_service import DocumentIndexService; "
+                "index = DocumentIndexService(Path(sys.argv[1])); "
+                "assert len(index.collection.get(where={'document_id': sys.argv[2]})['ids']) == int(sys.argv[3]); "
+                "assert affinity is None or os.sched_getaffinity(0) == affinity; "
+                "faulthandler.cancel_dump_traceback_later()"
+            ),
             str(tmp_path),
             str(document),
             str(count),

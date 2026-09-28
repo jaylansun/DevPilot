@@ -103,6 +103,7 @@ docker compose -f docker-compose.yml logs --tail=80 api web
 | 现象 | 检查位置 |
 | --- | --- |
 | `python:3.12-slim` 元数据或 Docker Hub token 下载失败 | 镜像仓库网络；构建还没进入应用代码阶段。恢复 Docker 网络/代理后重试，不删除数据卷 |
+| Chroma 跨进程持久化测试超过 30 秒 | 检查子进程调用栈；Linux x86 虚拟机上的原生组件时钟校准问题见 [初始化兼容说明](chroma-startup-compatibility.md)，不要直接跳过测试 |
 | API 启动失败 | API 日志中的迁移、数据库连接；核对 `POSTGRES_*` 与 `DATABASE_URL` |
 | 修改数据库密码后启动失败 | 已初始化的 PostgreSQL 卷不会因修改环境变量自动更改库内密码；应使用原配置或按数据库流程修改 |
 | 文档索引失败 | 知识库错误提示与 API 日志；首次模型下载需要可用网络，恢复后点重试 |

@@ -34,10 +34,13 @@ class PlanningReadService:
         session_factory: Callable[[], AsyncSession],
         index_service,
         min_score: float = 0.5,
+        *,
+        include_tasks: bool = True,
     ) -> None:
         self.session_factory = session_factory
         self.index_service = index_service
         self.min_score = min_score
+        self.include_tasks = include_tasks
         self.sources: list[RagSourceVO] = []
         self.tool_calls: list[dict] = []
         self.board_task_count = 0
@@ -53,7 +56,10 @@ class PlanningReadService:
         if self._snapshot is None:
             raise RuntimeError("必须先建立读取基线")
         reader = PlanningReadService(
-            self.session_factory, self.index_service, self.min_score
+            self.session_factory,
+            self.index_service,
+            self.min_score,
+            include_tasks=self.include_tasks,
         )
         reader._snapshot = self._snapshot
         reader._scope = self._scope
@@ -84,13 +90,17 @@ class PlanningReadService:
             ).one_or_none()
             if project is None:
                 raise self._changed()
-            tasks = list(
-                await session.scalars(
-                    select(TaskDO)
-                    .where(TaskDO.project_id == project_id)
-                    .order_by(TaskDO.id)
-                    .limit(MAX_BOARD_TASKS + 1)
+            tasks = (
+                list(
+                    await session.scalars(
+                        select(TaskDO)
+                        .where(TaskDO.project_id == project_id)
+                        .order_by(TaskDO.id)
+                        .limit(MAX_BOARD_TASKS + 1)
+                    )
                 )
+                if self.include_tasks
+                else []
             )
             if len(tasks) > MAX_BOARD_TASKS:
                 if self._snapshot is not None:
@@ -226,6 +236,8 @@ class PlanningReadService:
             }
 
     async def read_task_board(self, owner_id: UUID, project_id: UUID) -> dict:
+        if not self.include_tasks:
+            raise RuntimeError("文档读取器不能读取任务看板")
         async with self._lock:
             current = await self._read_context(owner_id, project_id)
             self._check_snapshot(current, owner_id, project_id)

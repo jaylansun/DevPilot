@@ -8,7 +8,7 @@ DevPilot 是一个 AI 项目协作助手，将项目资料、需求分析、任�
 | --- | --- |
 | 项目与任务管理 | 管理项目、任务状态、优先级和验收标准；默认紧凑列表，支持切换三列看板、筛选和分页 |
 | 项目知识库 | 上传 Markdown / TXT 文档，后台分块与向量索引，支持索引状态查看、失败重试和删除 |
-| AI 问答 | 根据项目资料回答问题，附带可展开的原文引用，支持回答增量显示 |
+| AI 问答 | 同一入口自由聊天、连续追问，独立持久会话与长对话摘要，按需调用文档检索和任务查询 |
 | 需求检查 | 识别文档问答、任务查询和需求检查意图，对照文档与任务提出可能遗漏和待确认问题 |
 | 任务规划 | 根据目标检索资料、读取看板，生成并保存任务草案，支持版本化编辑与直接送审 |
 | 人工审批 | 保存规划会话，支持批准、修改后批准或拒绝；批准后写入任务，重复执行不会重复创建 |
@@ -44,13 +44,13 @@ docker compose -f docker-compose.yml exec api python -m app.cli.seed_demo
 | API 文档 | [localhost:8000/docs](http://localhost:8000/docs) |
 | 代理健康检查 | [localhost:5173/api/v1/health](http://localhost:5173/api/v1/health) |
 
-首次索引需要下载中文向量模型，请等知识库文档“已就绪”后再提问。可以使用自带的[餐厅外卖网站需求文档](service/demo/restaurant.md)体验完整流程。
+首次索引需要下载中文向量模型，项目文档问答需要等待相关文档“已就绪”；自由聊天和任务查询不要求先上传文档。可以使用自带的[餐厅外卖网站需求文档](service/demo/restaurant.md)体验完整流程。
 
 上述命令显式使用通用 Compose 配置，不会自动读取本机覆盖文件。已有部署应继续沿用原配置、Compose 项目名和端口。业务数据与索引保存在 `postgres_data`、`knowledge_data` 命名卷中，日常更新不要使用 `down -v`。
 
 ### 模型配置
 
-默认 `AI_MODE=mock`，可以体验上传、真实检索、审批和任务写入，无需在线模型密钥。问答使用资料摘录，规划使用固定模板，需求检查只展示实际读取范围，不生成覆盖或遗漏结论。
+默认 `AI_MODE=mock`，可以体验上传、真实检索、审批和任务写入，无需在线模型密钥。聊天使用固定问候和规则演示、项目问答展示真实资料摘录；自然闲聊和语义工具选择需要 `live` 模式。规划使用固定模板，需求检查只展示实际读取范围，不生成覆盖或遗漏结论。
 
 要启用模型问答、任务拆解和需求检查报告，在 `.env` 中配置：
 
@@ -61,7 +61,7 @@ LLM_API_KEY=自行填写
 LLM_BASE_URL=供应商的OpenAI兼容接口地址
 ```
 
-模型需要支持 Chat Completions、工具调用和项目使用的结构化输出。真实模式会将问题或目标、相关文档片段及必要的任务信息发送给配置的模型服务，回答质量需要结合项目资料评估。
+模型需要支持 Chat Completions、工具调用和项目使用的结构化输出。真实模式会将问题或目标、近期聊天历史、会话摘要、相关文档片段及必要的任务信息发送给配置的模型服务，回答质量需要结合项目资料评估。
 
 更新配置后，重新创建 API 和 Web 容器：
 
@@ -98,7 +98,7 @@ docker compose -f docker-compose.yml exec api \
 | --- | --- |
 | 前端 | Vue 3、TypeScript、Vite、Vue Router、Pinia、Element Plus、Tailwind CSS 4 |
 | API | Python 3.12+、FastAPI、Pydantic、SQLAlchemy 异步会话、Alembic |
-| AI 编排 | LangChain 工具调用与结构化任务规划；LangGraph 意图路由、并行读取、审批暂停与恢复 |
+| AI 编排 | LangChain 按需工具聊天与结构化任务规划；LangGraph 意图路由、并行读取、审批暂停与恢复 |
 | 知识检索 | FastEmbed 本地中文向量模型、Chroma 持久化索引 |
 | 数据存储 | PostgreSQL 保存账号、项目、任务、文档原文、审批记录和工作流检查点 |
 | 流式通信 | NDJSON 传输回答增量、执行进度和最终结果 |
@@ -198,9 +198,10 @@ docker run --rm --network none \
 
 ## 使用范围
 
-- 当前支持单 API 实例；草案、规划会话与审批检查点持久化到 PostgreSQL。
+- 当前支持单 API 实例；普通聊天、会话上下文、草案、规划会话与审批检查点持久化到 PostgreSQL。
+- 聊天页支持新建、恢复、切换和删除会话；LangChain Agent 按需调用工具，LangGraph PostgreSQL 检查点保存上下文，框架摘要中间件压缩长对话。每个会话独立，不提取或跨会话共享用户偏好。详见[项目聊天助手](docs/chat-assistant.md)。
 - 普通写接口在发送成功响应前提交事务；AI 等待和流式传输期间，鉴权与业务查询使用的数据库连接已释放。
-- 本版本新增 `0006_plan_drafts` 迁移。已有环境升级需先执行 `alembic upgrade head`；Compose/Jenkins 的启动命令会自动执行迁移。旧的只读规划 API 和审批会话仍兼容。
+- 本版本新增 `0006_plan_drafts` 与 `0007_chat_sessions` 迁移。已有环境升级需先执行 `alembic upgrade head`；Compose/Jenkins 的启动命令会自动执行迁移。旧的只读规划 API 和审批会话仍兼容。
 - 知识库支持 Markdown 和 TXT；检查结果基于实际检索到的片段，不能视为全文覆盖。有对应任务也不代表功能已经实现。
 - 真实问答文字逐步显示；任务草案与检查报告先展示执行进度，通过校验后展示完整结果。
 - 任务编辑使用版本检查，冲突时保留草稿并提示重新载入，避免覆盖其他修改。看板支持列表与三列视图，暂不支持拖拽排序或多人实时同步。
@@ -213,6 +214,7 @@ docker run --rm --network none \
 | 完整操作示例 | [演示脚本](docs/day14-recording-script.md) |
 | 文档上传、分块与索引 | [知识库](docs/day7-knowledge-library.md) |
 | 问答、引用与效果评估 | [知识库问答](docs/day8-knowledge-qa.md) |
+| 统一聊天、上下文与按需工具 | [项目聊天助手](docs/chat-assistant.md) |
 | 工具调用与任务草案 | [任务规划](docs/day9-task-planning.md) |
 | 意图路由与需求对照 | [需求检查](docs/day10-requirement-check.md) |
 | 事件协议与取消处理 | [流式响应](docs/day11-streaming.md) |

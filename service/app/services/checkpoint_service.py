@@ -3,6 +3,7 @@
 from contextlib import asynccontextmanager
 
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from sqlalchemy.engine import make_url
 
 
@@ -13,6 +14,11 @@ async def open_checkpointer(database_url: str):
         .set(drivername="postgresql")
         .render_as_string(hide_password=False)
     )
-    async with AsyncPostgresSaver.from_conn_string(connection_url) as saver:
+    serde = JsonPlusSerializer(
+        allowed_msgpack_modules=[("app.schemas.chat_vo", "ChatCompletion")]
+    )
+    async with AsyncPostgresSaver.from_conn_string(
+        connection_url, serde=serde
+    ) as saver:
         await saver.setup()
         yield saver

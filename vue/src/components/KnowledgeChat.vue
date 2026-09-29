@@ -1,18 +1,28 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
-import { useRoute } from "vue-router";
+import { useRoute, useRouter } from "vue-router";
+import { ElPopconfirm } from "element-plus";
 import { ArrowDown, ChatLineRound, Document, Refresh, Top } from "@element-plus/icons-vue";
-import { askKnowledge, getKnowledgeInfo } from "@/api/rag_api";
+import { sendSessionChat, getChatInfo, listChatSessions, createChatSession, getChatSession, deleteChatSession } from "@/api/chat_api";
 import { ApiError, errorMessage } from "@/api/http_client";
 import RunTrace from "@/components/RunTrace.vue";
 import type { TraceEvent } from "@/types/stream";
 import AiPresence from "@/components/AiPresence.vue";
 import SafeMarkdown from "@/components/SafeMarkdown.vue";
-import type { RagAnswerVO, RagInfoVO } from "@/types/api";
+import type { ChatAnswerVO, ChatInfoVO, ChatSessionVO, SavedChatMessageVO } from "@/types/api";
 
 const props = defineProps<{ projectId: string }>();
 const route = useRoute();
-const info = ref<RagInfoVO | null>(null);
+const router = useRouter();
+const sessionId = ref<string | null>(null);
+const sessions = ref<ChatSessionVO[]>([]);
+const sessionsMore = ref(false);
+const historyOpen = ref(false);
+const hasOlder = ref(false);
+const sessionLoading = ref(false);
+let sessionRequestId = 0;
+let pendingPoll: ReturnType<typeof setTimeout> | undefined;
+const info = ref<ChatInfoVO | null>(null);
 const loading = ref(true);
 const loadError = ref("");
 const question = ref("");
@@ -28,17 +38,21 @@ const showLatestButton = ref(false);
 const pendingTurnId = ref<number | null>(null);
 const sending = computed(() => pendingTurnId.value !== null);
 const canAsk = computed(
-  () => !loading.value && !loadError.value && !!info.value?.configured && !!info.value.ready_documents,
+  () => !loading.value && !sessionLoading.value && !turns.value.some(t => t.pending) && !loadError.value && !!info.value?.configured,
 );
 type Turn = {
   id: number;
   question: string;
-  answer?: RagAnswerVO;
+  answer?: ChatAnswerVO;
+  clientId: string;
+  seq?: number;
+  pending?: boolean;
   error?: string;
   draft?: string;
   trace: TraceEvent[];
 };
 const turns = ref<Turn[]>([]);
+const taskLabels = { todo: "待办", in_progress: "进行中", done: "已完成" };
 const suggestions = [
   { title: "梳理项目", question: "项目资料中描述了哪些核心功能？" },
   { title: "核对规则", question: "资料中有哪些必须遵守的业务规则和限制？" },
@@ -77,8 +91,14 @@ async function loadInfo() {
   loading.value = true;
   loadError.value = "";
   try {
-    const result = await getKnowledgeInfo(props.projectId);
-    if (active && requestId === infoRequestId) info.value = result;
+    const project = props.projectId;
+    const [result, saved] = await Promise.all([getChatInfo(project), listChatSessions(project)]);
+    if (!active || requestId !== infoRequestId) return;
+    info.value = result;
+    sessions.value = saved;
+    sessionsMore.value = saved.length === 50;
+    const selected = sessionId.value ?? (typeof route.query.chat_session === "string" ? route.query.chat_session : saved[0]?.id);
+    if (selected) await selectSession(selected);
   } catch (reason) {
     if (active && requestId === infoRequestId) loadError.value = errorMessage(reason);
   } finally {
@@ -153,6 +173,75 @@ function useSuggestion(text: string) {
   questionInput.value?.focus();
 }
 
+function savedTurn(message: SavedChatMessageVO): Turn {
+  return { id: nextId++, clientId: message.client_message_id, seq: message.seq,
+    question: message.question, answer: message.answer ?? undefined, trace: [],
+    pending: message.status === "pending", error: message.error ?? undefined };
+}
+
+async function selectSession(id: string, close = true) {
+  const version = ++sessionRequestId;
+  const project = props.projectId;
+  sessionLoading.value = true;
+  clearTimeout(pendingPoll);
+  try {
+    const result = await getChatSession(project, id);
+    if (!active || project !== props.projectId || version !== sessionRequestId) return;
+    const sameSession = sessionId.value === id;
+    const earlier = sameSession ? turns.value.filter(t => t.seq && t.seq < (result.messages[0]?.seq ?? 0)) : [];
+    if (!sameSession) { question.value = ""; formError.value = ""; }
+    sessionId.value = id;
+    turns.value = [...earlier, ...result.messages.map(savedTurn)];
+    if (!earlier.length) hasOlder.value = result.has_more;
+    if (close) historyOpen.value = false;
+    await router.replace({ query: { ...route.query, chat_session: id } });
+    if (close || followingLatest.value) void scrollToLatest();
+    if (result.messages.some(m => m.status === "pending"))
+      pendingPoll = setTimeout(() => { if (active && sessionId.value === id && !sending.value) void selectSession(id, false); }, 3000);
+  } catch (reason) {
+    if (active && version === sessionRequestId) formError.value = errorMessage(reason);
+  } finally { if (active && version === sessionRequestId) sessionLoading.value = false; }
+}
+
+async function olderMessages() {
+  if (!sessionId.value || sessionLoading.value || !turns.value[0]?.seq) return;
+  const id = sessionId.value;
+  sessionLoading.value = true;
+  const viewport = messageViewport.value;
+  const oldHeight = viewport?.scrollHeight ?? 0;
+  try {
+    const result = await getChatSession(props.projectId, id, turns.value[0].seq);
+    if (!active || id !== sessionId.value) return;
+    turns.value.unshift(...result.messages.map(savedTurn));
+    hasOlder.value = result.has_more;
+    await nextTick();
+    if (viewport) viewport.scrollTop += viewport.scrollHeight - oldHeight;
+  } catch (reason) { formError.value = errorMessage(reason); }
+  finally { sessionLoading.value = false; }
+}
+
+async function loadSessions(more = false) {
+  const project = props.projectId;
+  try {
+    const result = await listChatSessions(project, more ? sessions.value.length : 0);
+    if (!active || project !== props.projectId) return;
+    sessions.value = more ? [...sessions.value, ...result] : result;
+    sessionsMore.value = result.length === 50;
+  } catch (reason) { formError.value = errorMessage(reason); }
+}
+
+async function removeSession(id: string) {
+  try {
+    await deleteChatSession(props.projectId, id);
+    if (sessionId.value === id) {
+      ++sessionRequestId; clearTimeout(pendingPoll);
+      sessionId.value = null; turns.value = []; hasOlder.value = false;
+      await router.replace({ query: { ...route.query, chat_session: undefined } });
+    }
+    await loadSessions();
+  } catch (reason) { formError.value = errorMessage(reason); }
+}
+
 async function send(retryTurn?: Turn) {
   if (sending.value || !canAsk.value) return;
   const text = (retryTurn?.question ?? question.value).trim();
@@ -162,7 +251,7 @@ async function send(retryTurn?: Turn) {
     return;
   }
   formError.value = "";
-  const turn: Turn = retryTurn ?? { id: nextId++, question: text, trace: [] };
+  const turn: Turn = retryTurn ?? { id: nextId++, question: text, clientId: crypto.randomUUID(), trace: [] };
   if (retryTurn) {
     turn.error = undefined;
     turn.answer = undefined;
@@ -171,8 +260,6 @@ async function send(retryTurn?: Turn) {
     question.value = text;
   } else {
     turns.value.push(turn);
-    // 只保留最近 20 轮页面记录，不持久存储问题或文档摘录。
-    if (turns.value.length > 20) turns.value.shift();
   }
   const requestId = ++answerRequestId;
   const controller = new AbortController();
@@ -180,7 +267,14 @@ async function send(retryTurn?: Turn) {
   pendingTurnId.value = turn.id;
   void scrollToLatest();
   try {
-    const answer = await askKnowledge(props.projectId, { question: text }, controller.signal, (event) => {
+    const project = props.projectId;
+    if (!sessionId.value) {
+      const created = await createChatSession(project);
+      if (!active || controller.signal.aborted || requestId !== answerRequestId) return;
+      sessionId.value = created.id;
+      await router.replace({ query: { ...route.query, chat_session: created.id } });
+    }
+    const answer = await sendSessionChat(project, sessionId.value, { question: text, client_message_id: turn.clientId }, controller.signal, (event) => {
       if (!active || controller.signal.aborted || requestId !== answerRequestId) return;
       const item = turns.value.find((value) => value.id === turn.id);
       if (!item) return;
@@ -193,6 +287,7 @@ async function send(retryTurn?: Turn) {
     const item = turns.value.find((value) => value.id === turn.id);
     if (item) { item.answer = answer; item.draft = ""; }
     if (question.value.trim() === text) question.value = "";
+    void loadSessions();
   } catch (reason) {
     if (!active || requestId !== answerRequestId) return;
     const item = turns.value.find((value) => value.id === turn.id);
@@ -234,14 +329,41 @@ function handleQuestionKeydown(event: KeyboardEvent) {
   void send();
 }
 
-function clearHistory() {
-  if (sending.value) return;
-  turns.value = [];
+async function clearHistory() {
+  if (sending.value || sessionLoading.value) return;
+  sessionLoading.value = true;
   formError.value = "";
+  try {
+    const project = props.projectId;
+    const result = await createChatSession(project);
+    if (!active || project !== props.projectId) return;
+    await selectSession(result.id);
+    question.value = "";
+    await loadSessions();
+    questionInput.value?.focus();
+  } catch (reason) { formError.value = errorMessage(reason); }
+  finally { sessionLoading.value = false; }
+}
+
+watch(() => props.projectId, () => {
+  ++answerRequestId;
+  ++sessionRequestId;
+  clearTimeout(pendingPoll);
+  sessionId.value = null;
+  sessions.value = [];
+  sessionLoading.value = false;
+  hasOlder.value = false;
+  historyOpen.value = false;
+  requestController?.abort();
+  pendingTurnId.value = null;
+  turns.value = [];
+  question.value = "";
+  formError.value = "";
+  info.value = null;
   followingLatest.value = true;
   showLatestButton.value = false;
-  questionInput.value?.focus();
-}
+  void loadInfo();
+});
 
 onMounted(() => {
   void loadInfo();
@@ -262,6 +384,8 @@ onMounted(() => {
   }
 });
 onBeforeUnmount(() => {
+  ++sessionRequestId;
+  clearTimeout(pendingPoll);
   active = false;
   ++answerRequestId;
   ++infoRequestId;
@@ -275,7 +399,7 @@ onBeforeUnmount(() => {
 <template>
   <section
     ref="chatPanel"
-    aria-label="项目知识库问答"
+    aria-label="项目聊天助手"
     class="flex min-h-0 flex-col rounded-[20px] bg-surface pt-2 text-ink max-mobile:pt-1"
     :style="{ height: panelHeight + 'px' }"
   >
@@ -283,16 +407,16 @@ onBeforeUnmount(() => {
       <div class="flex min-w-0 items-center gap-2.5">
         <el-icon aria-hidden="true" class="text-brand" :size="18"><ChatLineRound /></el-icon>
         <h2 class="m-0 text-sm font-semibold">项目助手</h2>
-        <span class="text-xs text-muted max-mobile:hidden">{{ loading ? "正在读取资料" : info?.ready_documents ? info.ready_documents + " 份资料就绪" : "项目知识库" }}</span>
+        <span class="text-xs text-muted max-mobile:hidden">{{ loading ? "正在读取状态" : info?.ready_documents ? info.ready_documents + " 份资料可查询" : "随时开始聊天" }}</span>
       </div>
       <div class="flex shrink-0 items-center gap-1">
         <button
-          v-if="turns.length"
           type="button"
           class="min-h-11 cursor-pointer rounded-xl px-3 text-xs text-muted transition-colors hover:bg-raised/70 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-40"
-          :disabled="sending"
+          :disabled="sending || sessionLoading"
           @click="clearHistory"
-        >清空记录</button>
+        >新对话</button>
+        <button type="button" class="min-h-11 cursor-pointer rounded-xl px-2 text-xs text-muted hover:bg-raised" :disabled="sending || sessionLoading" @click="historyOpen = true; loadSessions()">历史</button>
         <button
           type="button"
           aria-label="刷新问答状态"
@@ -315,19 +439,21 @@ onBeforeUnmount(() => {
       @keydown="stopAutomaticScroll"
     >
       <div class="flex min-h-full flex-col">
+        <button v-if="hasOlder" class="mx-auto my-3 min-h-11 text-sm text-brand" :disabled="sessionLoading" @click="olderMessages">加载更早消息</button>
+        <p v-if="turns.some(t => t.pending)" role="status" class="text-center text-xs text-muted">服务端正在处理，完成后会自动更新。</p>
         <div class="mx-auto w-full max-w-[820px] px-6 pb-2 pt-1 max-mobile:px-2">
           <p v-if="loadError" class="ui-error m-0" role="alert">{{ loadError }}。请刷新问答状态后重试。</p>
           <template v-else-if="info">
             <p class="m-0 text-center text-xs leading-5 text-muted" role="status">
-              <template v-if="info.mode === 'mock'">演示模式：展示检索摘录，不调用大模型。</template>
-              <template v-else>真实模型模式：问题与相关片段将发送给模型服务，请核对回答引用。</template>
+              <template v-if="info.mode === 'mock'">演示模式：固定问候与真实资料查询，不调用大模型。</template>
+              <template v-else>可以自由聊天，也可以查询项目资料和任务；项目回答请核对依据。</template>
             </p>
             <p v-if="!info.configured" class="ui-error mb-0 mt-3" role="alert">
-              真实问答尚未配置。请在服务器设置 MODEL_NAME、LLM_API_KEY 和 LLM_BASE_URL 后重新部署；不要在这里填写密钥。
+              聊天模型尚未配置，请联系管理员完成配置后刷新。
             </p>
             <p v-else-if="!info.ready_documents" class="mb-0 mt-3 text-sm leading-7 text-muted">
-              还没有已就绪的文档。请先到
-              <RouterLink :to="{ path: route.path, query: { tab: 'documents' } }" class="rounded text-brand underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">知识库上传资料</RouterLink>，索引完成后点击“刷新问答状态”。
+              还没有已就绪的文档，可以直接聊天或查询任务。需要了解项目资料时，可到
+              <RouterLink :to="{ path: route.path, query: { tab: 'documents' } }" class="rounded text-brand underline underline-offset-4 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand">知识库上传资料</RouterLink>。
             </p>
           </template>
         </div>
@@ -335,9 +461,9 @@ onBeforeUnmount(() => {
         <div v-if="!turns.length" class="mx-auto flex w-full max-w-[760px] flex-1 flex-col items-center justify-center px-6 text-center max-mobile:px-2" :class="compactPanel ? 'pb-2 pt-1' : 'pb-4 pt-2'">
           <div class="flex items-center" :class="compactPanel ? 'gap-3 max-mobile:gap-2' : 'flex-col'">
             <div class="shrink-0" :class="compactPanel ? 'size-8' : 'size-[88px] max-mobile:size-[72px]'"><AiPresence /></div>
-            <h3 class="mb-0 leading-[1.35] font-semibold tracking-[-0.03em] text-balance" :class="compactPanel ? 'mt-0 text-2xl max-mobile:text-xl' : 'mt-3 text-[28px] max-mobile:mt-2 max-mobile:text-2xl'">让资料回答你的问题</h3>
+            <h3 class="mb-0 leading-[1.35] font-semibold tracking-[-0.03em] text-balance" :class="compactPanel ? 'mt-0 text-2xl max-mobile:text-xl' : 'mt-3 text-[28px] max-mobile:mt-2 max-mobile:text-2xl'">聊聊想法，也聊聊项目</h3>
           </div>
-          <p class="mb-0 mt-2 text-[15px] text-muted max-mobile:text-sm" :class="compactPanel ? 'leading-6' : 'leading-7'">梳理需求，核对规则，找到原文依据。</p>
+          <p class="mb-0 mt-2 text-[15px] text-muted max-mobile:text-sm" :class="compactPanel ? 'leading-6' : 'leading-7'">自由提问，按需查资料、看任务，也能接着聊。</p>
           <div class="flex flex-wrap justify-center gap-2.5 max-mobile:gap-2" :class="compactPanel ? 'mt-2' : 'mt-5 max-mobile:mt-4'" aria-label="推荐问题">
             <button
               v-for="suggestion in suggestions"
@@ -359,7 +485,7 @@ onBeforeUnmount(() => {
           role="log"
           aria-live="polite"
           aria-relevant="additions text"
-          aria-label="本页问答记录"
+          aria-label="会话问答记录"
           enter-active-class="transition-[opacity,transform] duration-200 ease-out motion-reduce:transition-none"
           enter-from-class="translate-y-2 opacity-0 motion-reduce:translate-y-0"
           enter-to-class="translate-y-0 opacity-100"
@@ -379,7 +505,7 @@ onBeforeUnmount(() => {
               <div class="min-w-0 flex-1">
                 <p class="mb-3 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm font-semibold">
                   项目助手
-                  <span v-if="turn.answer" class="text-xs font-normal text-muted">{{ turn.answer.mode === "mock" ? "检索演示" : "AI 回答" }}<span class="ml-2">{{ turn.answer.status === "insufficient_evidence" ? "资料不足" : "附来源引用" }}</span></span>
+                  <span v-if="turn.answer" class="text-xs font-normal text-muted">{{ turn.answer.mode === "mock" ? "演示回答" : "AI 回答" }}<span class="ml-2">{{ turn.answer.status === "insufficient_evidence" ? "资料不足" : turn.answer.basis === "general" ? "自由交流" : turn.answer.sources.length ? "附来源引用" : "任务查询" }}</span></span>
                 </p>
                 <RunTrace :events="turn.trace" :running="pendingTurnId === turn.id" />
                 <Transition
@@ -400,6 +526,16 @@ onBeforeUnmount(() => {
                   </div>
                   <div v-else-if="turn.answer" key="answer">
                     <SafeMarkdown :content="turn.answer.answer" />
+                    <details v-if="turn.answer.tasks.length" class="mt-5 rounded-xl border border-line/80 px-4 py-3" aria-label="查询到的任务">
+                      <summary class="cursor-pointer text-sm text-muted">{{ turn.answer.tasks.length }} 项相关任务，可展开核对</summary>
+                      <ul class="mb-0 mt-3 space-y-3 pl-4">
+                        <li v-for="task in turn.answer.tasks" :key="task.id" class="text-sm leading-6 wrap-anywhere">
+                          <span class="font-medium">{{ task.title }}</span>
+                          <span class="ml-2 text-xs text-muted">{{ taskLabels[task.status] }}</span>
+                          <p v-if="task.description" class="m-0 whitespace-pre-wrap text-muted">{{ task.description }}{{ task.description_truncated ? '…' : '' }}</p>
+                        </li>
+                      </ul>
+                    </details>
                     <div v-if="turn.answer.sources.length" class="mt-6 space-y-2" aria-label="回答来源">
                       <p class="mb-2 text-xs text-muted">{{ turn.answer.sources.length }} 条来源，可展开核对</p>
                       <details v-for="source in turn.answer.sources" :key="source.source_id" class="group rounded-xl border border-line/80 transition-colors duration-150 open:bg-canvas/70">
@@ -422,7 +558,7 @@ onBeforeUnmount(() => {
                     <p class="m-0 text-base leading-[1.85] whitespace-pre-wrap wrap-anywhere">{{ turn.draft }}</p>
                   </div>
                   <div v-else key="waiting" class="py-1" role="status">
-                    <p class="m-0 flex items-center gap-2.5 text-sm leading-7 text-muted"><span class="size-1.5 shrink-0 animate-pulse rounded-full bg-brand motion-reduce:animate-none" aria-hidden="true" />正在检索资料并准备回答，请稍候……</p>
+                    <p class="m-0 flex items-center gap-2.5 text-sm leading-7 text-muted"><span class="size-1.5 shrink-0 animate-pulse rounded-full bg-brand motion-reduce:animate-none" aria-hidden="true" />正在准备回答，需要时会查询项目资料或任务……</p>
                     <p class="mb-0 mt-1 text-xs leading-6 text-muted">回答将逐步显示，完成校验后展示引用来源。</p>
                   </div>
                 </Transition>
@@ -451,7 +587,7 @@ onBeforeUnmount(() => {
             rows="1"
             maxlength="2000"
             class="block min-h-12 w-full resize-none border-0 bg-transparent py-2 text-base leading-7 text-ink placeholder:text-muted/80 focus:outline-0 disabled:cursor-not-allowed disabled:opacity-40"
-            placeholder="问问项目需求、业务规则或文档细节…"
+            placeholder="聊聊想法，或问问项目资料和任务…"
             aria-describedby="knowledge-input-help knowledge-history-help"
             :aria-invalid="!!formError"
             :aria-errormessage="formError ? 'knowledge-form-error' : undefined"
@@ -469,8 +605,24 @@ onBeforeUnmount(() => {
             </button>
           </div>
         </div>
-        <p id="knowledge-history-help" class="mb-0 mt-2.5 text-center text-xs leading-5 text-muted">每轮独立检索，仅本页临时保留最近 20 轮；刷新或离开后清空。</p>
+        <p id="knowledge-history-help" class="mb-0 mt-2.5 text-center text-xs leading-5 text-muted">会话自动保存，可在历史中继续对话；新会话不会带入其他会话的内容。</p>
       </form>
     </div>
+    <el-dialog v-model="historyOpen" title="会话历史" width="min(620px, 94vw)" class="ui-dialog" destroy-on-close>
+      <p v-if="formError" role="alert" class="ui-error">{{ formError }}</p>
+      <p class="text-sm text-muted">会话保存在账号下。删除后将清除这段对话的记录和上下文。</p>
+      <p v-if="!sessions.length" class="text-muted">暂无已保存会话</p>
+      <div v-for="item in sessions" :key="item.id" class="mb-2 flex items-center gap-2 rounded-xl border border-line p-3">
+        <button class="min-w-0 flex-1 cursor-pointer text-left text-ink" :disabled="sessionLoading" @click="selectSession(item.id)">
+          <span class="block truncate font-medium">{{ item.title }}</span>
+          <span class="text-xs text-muted">{{ new Date(item.updated_at).toLocaleString() }}{{ item.id === sessionId ? ' · 当前会话' : '' }}</span>
+        </button>
+        <el-popconfirm title="删除此会话及其全部记录？" confirm-button-text="删除" cancel-button-text="取消" @confirm="removeSession(item.id)">
+          <template #reference><el-button type="danger" text :disabled="sessionLoading">删除会话</el-button></template>
+        </el-popconfirm>
+      </div>
+      <el-button v-if="sessionsMore" @click="loadSessions(true)">更多会话</el-button>
+    </el-dialog>
+
   </section>
 </template>

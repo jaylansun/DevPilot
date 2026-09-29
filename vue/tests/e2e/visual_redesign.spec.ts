@@ -1,3 +1,4 @@
+import { ChatFixture } from "./chat_fixture";
 import { finalResponse, savedDraft } from "./stream_helpers";
 import { expect, test, type Page } from "@playwright/test";
 
@@ -15,13 +16,15 @@ const source = {
 // 视觉验收只使用本地拦截数据，不访问业务数据库或真实模型服务。
 async function workspace(page: Page) {
   await page.addInitScript(() => sessionStorage.setItem("devpilot.access_token", "visual-test-token"));
+  const chatFixture = new ChatFixture();
   await page.route("**/api/v1/**", async (route) => {
+    if (await chatFixture.handle(route)) return;
     const path = new URL(route.request().url()).pathname;
     if (path.endsWith("/me")) return route.fulfill({ json: { id: projectId, username: "Jaylan", role: "member" } });
     if (path === "/api/v1/projects") return route.fulfill({ json: { items: [project, { ...project, id: documentId, name: "团队知识空间", description: "集中整理团队文档，让每个问题都能找到可以核对的依据。" }], total: 2 } });
     if (path === `/api/v1/projects/${projectId}`) return route.fulfill({ json: project });
-    if (path.endsWith("/knowledge")) return route.fulfill({ json: { mode: "mock", configured: true, ready_documents: 3 } });
-    if (path.endsWith("/knowledge/questions/stream")) return route.fulfill(finalResponse("knowledge", { mode: "mock", status: "answered", answer: "### 下单前需要确认三件事\n\n1. **配送信息**：收货人、手机号和配送地址。\n2. **商品库存**：提交前再次校验，避免超卖。\n3. **异常处理**：库存不足时保留购物车，提示调整数量。\n\n这些要求来自项目中的订单流程说明。[1]", sources: [source] }));
+    if (path.endsWith("/chat")) return route.fulfill({ json: { mode: "mock", configured: true, ready_documents: 3 } });
+    if (/\/chat\/sessions\/[^/]+\/messages\/stream$/.test(path)) return route.fulfill(finalResponse("chat", { basis: "project", tasks: [], tool_calls: [{ name: "search_documents", status: "success", item_count: 1 }], mode: "mock", status: "answered", answer: "### 下单前需要确认三件事\n\n1. **配送信息**：收货人、手机号和配送地址。\n2. **商品库存**：提交前再次校验，避免超卖。\n3. **异常处理**：库存不足时保留购物车，提示调整数量。\n\n这些要求来自项目中的订单流程说明。[1]", sources: [source] }));
     if (path.endsWith("/planning")) return route.fulfill({ json: { mode: "mock", configured: true, ready_documents: 3, task_count: 2 } });
     if (path.endsWith("/conversations")) return route.fulfill({ json: [] });
     if (path.endsWith("/planning/drafts")) return route.fulfill({ json: { items: [], total: 0, offset: 0, limit: 20 } });

@@ -2,6 +2,7 @@ from fastapi import APIRouter
 
 from app.api.v1.approval_controller import router as approval_router
 from app.api.v1.auth_controller import router as auth_router
+from app.api.v1.chat_controller import router as chat_router
 from app.api.v1.document_controller import router as documents_router
 from app.api.v1.plan_controller import router as plan_router
 from app.api.v1.plan_draft_controller import router as draft_router
@@ -17,6 +18,7 @@ router.include_router(projects_router)
 router.include_router(tasks_router)
 router.include_router(documents_router)
 router.include_router(rag_router)
+router.include_router(chat_router)
 router.include_router(plan_router)
 router.include_router(draft_router)
 router.include_router(workflow_router)

@@ -1,3 +1,4 @@
+import { ChatFixture } from "./chat_fixture";
 import { createServer, type Server, type ServerResponse } from "node:http";
 import { randomUUID } from "node:crypto";
 import { test, expect, type Page } from "@playwright/test";
@@ -38,9 +39,10 @@ function send(event: object, index = calls.length - 1) {
 }
 const result = {
   mode: "live", status: "answered", answer: "订单需要手机号。[1]",
+  basis: "project", tasks: [], tool_calls: [{ name: "search_documents", status: "success", item_count: 1 }],
   sources: [{ source_id: 1, document_id: randomUUID(), filename: "需求.md", chunk_index: 0, heading: "订单", text: "下单必须填写手机号。" }],
 };
-function finish(kind = "knowledge", value: unknown = result) {
+function finish(kind = "chat", value: unknown = result) {
   send({ type: "final", kind, result: value });
   calls.at(-1)!.response.end();
 }
@@ -48,14 +50,16 @@ function finish(kind = "knowledge", value: unknown = result) {
 async function setup(page: Page, tab = "chat") {
   const id = randomUUID();
   await page.addInitScript(() => sessionStorage.setItem("devpilot.access_token", "offline-stream-token"));
+  const chatFixture = new ChatFixture();
   await page.route("**/api/v1/**", async (route) => {
+    if (await chatFixture.handle(route)) return;
     const path = new URL(route.request().url()).pathname;
     if (path.endsWith("/stream")) return route.continue({ url: origin + path });
     if (path.endsWith("/me")) return route.fulfill({ json: { id: randomUUID(), username: "流式测试", role: "member" } });
     if (path === `/api/v1/projects/${id}`) return route.fulfill({ json: {
       id, name: "餐厅外卖网站", description: "", created_at: "2026-09-20T00:00:00Z", updated_at: "2026-09-20T00:00:00Z",
     } });
-    if (/\/(knowledge|assistant|planning)$/.test(path)) return route.fulfill({ json: { mode: "live", configured: true, ready_documents: 1, task_count: 1 } });
+    if (/\/(chat|knowledge|assistant|planning)$/.test(path)) return route.fulfill({ json: { mode: "live", configured: true, ready_documents: 1, task_count: 1 } });
     return route.fulfill({ status: 404, json: {} });
   });
   await page.goto(`/projects/${id}?tab=${tab}`);
@@ -121,7 +125,7 @@ test("停止等待会关闭连接，立即重试不被上一轮覆盖", async ({
   await expect.poll(() => calls.length).toBe(2);
   send({ type: "token", text: "新的回答" });
   await expect(page.getByTestId("streaming-answer")).toContainText("新的回答");
-  finish("knowledge", { ...result, answer: "新的完整回答。[1]" });
+  finish("chat", { ...result, answer: "新的完整回答。[1]" });
   await expect(page.getByText("新的完整回答。[1]", { exact: true })).toBeVisible();
 });
 

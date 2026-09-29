@@ -314,6 +314,127 @@ export interface paths {
     patch?: never;
     trace?: never;
   };
+  "/api/v1/projects/{project_id}/chat": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+
+    get: operations["chat_info_api_v1_projects__project_id__chat_get"];
+    put?: never;
+    post?: never;
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/projects/{project_id}/chat/messages": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+
+    post: operations["chat_message_api_v1_projects__project_id__chat_messages_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/projects/{project_id}/chat/messages/stream": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+
+    post: operations["stream_chat_api_v1_projects__project_id__chat_messages_stream_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/projects/{project_id}/chat/sessions": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+
+    get: operations["list_sessions_api_v1_projects__project_id__chat_sessions_get"];
+    put?: never;
+
+    post: operations["create_session_api_v1_projects__project_id__chat_sessions_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/projects/{project_id}/chat/sessions/{session_id}": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+
+    get: operations["get_session_api_v1_projects__project_id__chat_sessions__session_id__get"];
+    put?: never;
+    post?: never;
+
+    delete: operations["delete_session_api_v1_projects__project_id__chat_sessions__session_id__delete"];
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/projects/{project_id}/chat/sessions/{session_id}/messages": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+
+    post: operations["saved_chat_api_v1_projects__project_id__chat_sessions__session_id__messages_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
+  "/api/v1/projects/{project_id}/chat/sessions/{session_id}/messages/stream": {
+    parameters: {
+      query?: never;
+      header?: never;
+      path?: never;
+      cookie?: never;
+    };
+    get?: never;
+    put?: never;
+
+    post: operations["saved_chat_stream_api_v1_projects__project_id__chat_sessions__session_id__messages_stream_post"];
+    delete?: never;
+    options?: never;
+    head?: never;
+    patch?: never;
+    trace?: never;
+  };
   "/api/v1/projects/{project_id}/planning": {
     parameters: {
       query?: never;
@@ -569,6 +690,46 @@ export interface components {
     Body_create_document_api_v1_projects__project_id__documents_post: {
 
       file: string;
+    };
+
+    ChatAnswerVO: {
+
+      answer: string;
+
+      basis: "general" | "project";
+
+      sources: components["schemas"]["RagSourceVO"][];
+
+      tasks: components["schemas"]["TaskEvidenceVO"][];
+
+      tool_calls: components["schemas"]["ToolCallVO"][];
+
+      status: "answered" | "insufficient_evidence" | "demo";
+
+      mode: "mock" | "live";
+    };
+
+    ChatInfoVO: {
+
+      mode: "mock" | "live";
+
+      configured: boolean;
+
+      ready_documents: number;
+    };
+
+    ChatMessageQO: {
+
+      role: "user" | "assistant";
+
+      content: string;
+    };
+
+    ChatRequestQO: {
+
+      question: string;
+
+      history?: components["schemas"]["ChatMessageQO"][];
     };
 
     ConversationCreateQO: {
@@ -867,6 +1028,50 @@ export interface components {
       reason: string;
 
       source_ids: number[];
+    };
+
+    SavedMessageVO: {
+
+      id: string;
+
+      client_message_id: string;
+
+      seq: number;
+
+      question: string;
+      answer: components["schemas"]["ChatAnswerVO"] | null;
+
+      status: "pending" | "completed" | "failed" | "cancelled";
+
+      error: string | null;
+
+      created_at: string;
+    };
+
+    SessionDetailVO: {
+      session: components["schemas"]["SessionVO"];
+
+      messages: components["schemas"]["SavedMessageVO"][];
+
+      has_more: boolean;
+    };
+
+    SessionMessageQO: {
+
+      question: string;
+
+      client_message_id: string;
+    };
+
+    SessionVO: {
+
+      id: string;
+
+      title: string;
+
+      created_at: string;
+
+      updated_at: string;
     };
 
     TaskCreateQO: {
@@ -1911,6 +2116,307 @@ export interface operations {
     requestBody: {
       content: {
         "application/json": components["schemas"]["RagQuestionQO"];
+      };
+    };
+    responses: {
+
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/x-ndjson": string;
+        };
+      };
+
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  chat_info_api_v1_projects__project_id__chat_get: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        project_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ChatInfoVO"];
+        };
+      };
+
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  chat_message_api_v1_projects__project_id__chat_messages_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        project_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ChatRequestQO"];
+      };
+    };
+    responses: {
+
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ChatAnswerVO"];
+        };
+      };
+
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  stream_chat_api_v1_projects__project_id__chat_messages_stream_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        project_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["ChatRequestQO"];
+      };
+    };
+    responses: {
+
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/x-ndjson": string;
+        };
+      };
+
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  list_sessions_api_v1_projects__project_id__chat_sessions_get: {
+    parameters: {
+      query?: {
+        offset?: number;
+      };
+      header?: never;
+      path: {
+        project_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SessionVO"][];
+        };
+      };
+
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  create_session_api_v1_projects__project_id__chat_sessions_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        project_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+
+      201: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SessionVO"];
+        };
+      };
+
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  get_session_api_v1_projects__project_id__chat_sessions__session_id__get: {
+    parameters: {
+      query?: {
+        before?: number | null;
+      };
+      header?: never;
+      path: {
+        project_id: string;
+        session_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["SessionDetailVO"];
+        };
+      };
+
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  delete_session_api_v1_projects__project_id__chat_sessions__session_id__delete: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        project_id: string;
+        session_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody?: never;
+    responses: {
+
+      204: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content?: never;
+      };
+
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  saved_chat_api_v1_projects__project_id__chat_sessions__session_id__messages_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        project_id: string;
+        session_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SessionMessageQO"];
+      };
+    };
+    responses: {
+
+      200: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["ChatAnswerVO"];
+        };
+      };
+
+      422: {
+        headers: {
+          [name: string]: unknown;
+        };
+        content: {
+          "application/json": components["schemas"]["HTTPValidationError"];
+        };
+      };
+    };
+  };
+  saved_chat_stream_api_v1_projects__project_id__chat_sessions__session_id__messages_stream_post: {
+    parameters: {
+      query?: never;
+      header?: never;
+      path: {
+        project_id: string;
+        session_id: string;
+      };
+      cookie?: never;
+    };
+    requestBody: {
+      content: {
+        "application/json": components["schemas"]["SessionMessageQO"];
       };
     };
     responses: {

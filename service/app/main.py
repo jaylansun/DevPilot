@@ -13,6 +13,9 @@ from app.middleware import request_id_middleware
 from app.middleware.upload_limit_middleware import UploadLimitMiddleware
 from app.schemas.system_vo import HealthVO
 from app.services.approval_service import ApprovalService
+from app.services.chat_model_service import ChatModelService
+from app.services.chat_service import ChatService
+from app.services.chat_session_service import ChatSessionService
 from app.services.checkpoint_service import open_checkpointer
 from app.services.document_index_service import DocumentIndexService
 from app.services.document_worker_service import DocumentWorkerService
@@ -47,6 +50,15 @@ async def lifespan(application: FastAPI):
         stack.push_async_callback(close_database)
         saver = await stack.enter_async_context(
             open_checkpointer(settings.database_url)
+        )
+        application.state.chat_service = ChatService(
+            settings,
+            index_service,
+            AsyncSessionFactory,
+            ChatModelService(settings, saver),
+        )
+        application.state.chat_sessions = ChatSessionService(
+            AsyncSessionFactory, application.state.chat_service
         )
         application.state.approval_service = ApprovalService(
             AsyncSessionFactory, application.state.plan_service, saver

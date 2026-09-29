@@ -18,7 +18,7 @@ from app.services.run_limits import (
 
 logger = logging.getLogger(__name__)
 RunOperation = Callable[[EventPublisher], Awaitable[BaseModel]]
-RunKind = Literal["knowledge", "planning", "workflow", "approval", "draft"]
+RunKind = Literal["knowledge", "chat", "planning", "workflow", "approval", "draft"]
 
 
 class StreamRunner:
@@ -41,6 +41,8 @@ class StreamRunner:
             else (
                 PLANNING_STREAM_TIMEOUT_SECONDS
                 if kind in ("planning", "approval", "draft")
+                else 115
+                if kind == "chat"
                 else DEFAULT_STREAM_TIMEOUT_SECONDS
             )
         )

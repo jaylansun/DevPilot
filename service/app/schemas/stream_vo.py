@@ -5,6 +5,7 @@ from typing import Annotated, Literal
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter
 
 from app.schemas.approval_vo import ApprovalVO
+from app.schemas.chat_vo import ChatAnswerVO
 from app.schemas.error_vo import ErrorDetailVO
 from app.schemas.plan_draft_vo import PlanDraftVO
 from app.schemas.plan_vo import PlanResultVO
@@ -12,6 +13,7 @@ from app.schemas.rag_vo import RagAnswerVO
 from app.schemas.workflow_vo import WorkflowResultVO
 
 StepName = Literal[
+    "answer_chat",
     "retrieve_knowledge",
     "answer_knowledge",
     "validate_result",
@@ -59,6 +61,12 @@ class KnowledgeFinal(EventBase):
     result: RagAnswerVO
 
 
+class ChatFinal(EventBase):
+    type: Literal["final"] = "final"
+    kind: Literal["chat"] = "chat"
+    result: ChatAnswerVO
+
+
 class PlanningFinal(EventBase):
     type: Literal["final"] = "final"
     kind: Literal["planning"] = "planning"
@@ -89,7 +97,7 @@ class ApprovalFinal(EventBase):
 
 
 FinalEvent = Annotated[
-    KnowledgeFinal | PlanningFinal | WorkflowFinal | ApprovalFinal | DraftFinal,
+    KnowledgeFinal | ChatFinal | PlanningFinal | WorkflowFinal | ApprovalFinal | DraftFinal,
     Field(discriminator="kind"),
 ]
 

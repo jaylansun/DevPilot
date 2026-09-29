@@ -51,7 +51,20 @@ export function parseStreamEvent(line: string): StreamEvent {
         break;
       }
       if (!object(result) || !["mock", "live"].includes(result.mode as string) || !Array.isArray(result.sources)) throw invalid();
-      if (event.kind === "knowledge") {
+      if (event.kind === "chat") {
+        if (typeof result.answer !== "string" || !["answered", "insufficient_evidence", "demo"].includes(result.status as string) ||
+            !["general", "project"].includes(result.basis as string) || !Array.isArray(result.tasks) || !Array.isArray(result.tool_calls) ||
+            !result.sources.every(source => object(source) && Number.isSafeInteger(source.source_id) && (source.source_id as number) > 0 &&
+              typeof source.document_id === "string" && typeof source.filename === "string" && typeof source.heading === "string" &&
+              typeof source.text === "string" && Number.isSafeInteger(source.chunk_index) && (source.chunk_index as number) >= 0) ||
+            !result.tasks.every(task => object(task) && typeof task.id === "string" && typeof task.title === "string" &&
+              ["todo", "in_progress", "done"].includes(task.status as string) && Number.isInteger(task.priority) &&
+              typeof task.description === "string" && typeof task.acceptance_criteria === "string" &&
+              typeof task.description_truncated === "boolean" && typeof task.acceptance_criteria_truncated === "boolean") ||
+            !result.tool_calls.every(call => object(call) && ["search_documents", "read_task_board"].includes(call.name as string) &&
+              ["success", "empty"].includes(call.status as string) && Number.isSafeInteger(call.item_count) && (call.item_count as number) >= 0) ||
+            (result.basis === "general" && (result.sources.length > 0 || result.tasks.length > 0 || result.tool_calls.length > 0))) throw invalid();
+      } else if (event.kind === "knowledge") {
         if (typeof result.answer !== "string" || !["answered", "insufficient_evidence"].includes(result.status as string)) throw invalid();
       } else if (event.kind === "planning") {
         if (!object(result.proposal) || !Array.isArray(result.proposal.tasks)) throw invalid();
@@ -119,7 +132,7 @@ export function streamRequest<K extends RunKind>(
   return request<Results[K]>(path, {
     method: "POST", body, signal,
     // 规划服务 120 秒，流式收尾 130 秒；浏览器留出传输时间，避免提前掐断。
-    timeoutMs: kind === "planning" || kind === "approval" || kind === "draft" ? 140_000 : 75_000,
+    timeoutMs: kind === "planning" || kind === "approval" || kind === "draft" ? 140_000 : kind === "chat" ? 120_000 : 75_000,
     accept: "application/x-ndjson",
     readResponse: (response, combinedSignal) => readNDJSON(response, kind, onEvent, combinedSignal),
   });

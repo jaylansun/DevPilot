@@ -4,6 +4,7 @@ import type { StepName, TraceEvent } from "@/types/stream";
 
 const props = defineProps<{ events: TraceEvent[]; running: boolean }>();
 const labels: Record<StepName, string> = {
+  answer_chat: "理解问题并准备回答",
   retrieve_knowledge: "检索相关资料", answer_knowledge: "生成回答", validate_result: "校验结果与依据",
   classify_intent: "识别本次用途", load_lookup_board: "读取任务看板", answer_lookup: "整理匹配任务",
   retrieve_documents: "检索需求文档", load_task_board: "读取任务看板", generate_report: "对照需求与任务",

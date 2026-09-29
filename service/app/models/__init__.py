@@ -1,4 +1,8 @@
 from app.models.approval_do import ApprovalDO, ConversationDO
+from app.models.chat_do import (
+    ChatMessageDO,
+    ChatSessionDO,
+)
 from app.models.document_do import DocumentDO, DocumentStatus
 from app.models.plan_draft_do import PlanDraftDO
 from app.models.project_do import ProjectDO
@@ -7,6 +11,8 @@ from app.models.user_do import UserDO, UserRole
 from app.models.vector_cleanup_do import VectorCleanupDO
 
 __all__ = [
+    "ChatSessionDO",
+    "ChatMessageDO",
     "ApprovalDO",
     "ConversationDO",
     "DocumentDO",

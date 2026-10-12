@@ -2,6 +2,8 @@ from typing import Literal, Self
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+ChatIntent = Literal["auto", "task_planning", "requirement_check"]
+
 
 class ChatMessageQO(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
@@ -16,6 +18,7 @@ class ChatRequestQO(BaseModel):
     model_config = ConfigDict(extra="forbid", str_strip_whitespace=True)
 
     question: str = Field(min_length=1, max_length=2000)
+    intent: ChatIntent = "auto"
     history: list[ChatMessageQO] = Field(default_factory=list, max_length=20)
 
     @model_validator(mode="after")

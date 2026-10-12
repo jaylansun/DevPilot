@@ -3,12 +3,15 @@ import { createServer, type Server, type ServerResponse } from "node:http";
 import { randomUUID } from "node:crypto";
 import { test, expect, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
+import { planAnswer, checkAnswer } from "./unified_fixture";
+import type { PlanResultVO, WorkflowResultVO, SessionMessageQO } from "../../src/types/api";
 const contract = JSON.parse(readFileSync(new URL("../../src/types/stream.contract.json", import.meta.url), "utf8"));
 
 // 使用真实 HTTP 分块响应，验证浏览器在连接仍打开时就渲染增量。
 let server: Server;
 let origin: string;
 let calls: { response: ServerResponse; seq: number; closed: boolean }[] = [];
+let payloads: SessionMessageQO[] = [];
 test.beforeAll(async () => {
   server = createServer((request, response) => {
     response.setHeader("Access-Control-Allow-Origin", "*");
@@ -30,7 +33,7 @@ test.afterAll(async () => {
   server.closeAllConnections();
   await new Promise<void>((resolve) => server.close(() => resolve()));
 });
-test.beforeEach(() => { calls = []; });
+test.beforeEach(() => { calls = []; payloads = []; });
 test.afterEach(() => { for (const call of calls) call.response.destroy(); });
 
 function send(event: object, index = calls.length - 1) {
@@ -54,7 +57,10 @@ async function setup(page: Page, tab = "chat") {
   await page.route("**/api/v1/**", async (route) => {
     if (await chatFixture.handle(route)) return;
     const path = new URL(route.request().url()).pathname;
-    if (path.endsWith("/stream")) return route.continue({ url: origin + path });
+    if (/\/chat\/sessions\/[^/]+\/messages\/stream$/.test(path)) {
+      payloads.push(route.request().postDataJSON());
+      return route.continue({ url: origin + path });
+    }
     if (path.endsWith("/me")) return route.fulfill({ json: { id: randomUUID(), username: "流式测试", role: "member" } });
     if (path === `/api/v1/projects/${id}`) return route.fulfill({ json: {
       id, name: "餐厅外卖网站", description: "", created_at: "2026-09-20T00:00:00Z", updated_at: "2026-09-20T00:00:00Z",
@@ -132,11 +138,12 @@ test("停止等待会关闭连接，立即重试不被上一轮覆盖", async ({
 for (const kind of ["planning", "workflow"] as const) {
   test(`${kind} 在最终结果到来前展示真实节点和工具轨迹`, async ({ page }) => {
     await setup(page, kind === "planning" ? "planning" : "assistant");
-    if (kind === "planning") {
-      await page.getByLabel("你想完成什么目标？").fill("规划下单校验");
-      await page.getByRole("button", { name: "生成任务草案", exact: true }).click();
-    } else await page.getByRole("button", { name: "开始检查", exact: true }).click();
+    const intent = kind === "planning" ? "task_planning" : "requirement_check";
+    await expect(page.getByRole("button", { name: kind === "planning" ? "生成任务草案" : "检查需求缺口", exact: true })).toHaveAttribute("aria-pressed", "true");
+    await page.getByLabel("你想了解什么？").fill(kind === "planning" ? "规划下单校验" : "对照订单需求检查遗漏");
+    await page.getByRole("button", { name: "发送问题", exact: true }).click();
     await expect.poll(() => calls.length).toBe(1);
+    expect(payloads[0]!.intent).toBe(intent);
     send({ type: "node", id: "parent", name: kind === "planning" ? "draft_proposal" : "generate_report", status: "started" });
     send({ type: "tool", id: "search", name: "search_documents", status: "started" });
     const trace = page.getByLabel("执行轨迹");
@@ -146,7 +153,10 @@ for (const kind of ["planning", "workflow"] as const) {
     send({ type: "tool", id: "search", name: "search_documents", status: "completed" });
     await expect(trace.getByText("已完成", { exact: true })).toHaveCount(1);
     const sample = contract.events.find((e) => e.type === "final" && "kind" in e && e.kind === kind)!;
-    finish(kind, "result" in sample ? sample.result : null);
+    const answer = kind === "planning" ? planAnswer("规划下单校验", sample.result as PlanResultVO) : checkAnswer(sample.result as WorkflowResultVO);
+    finish("chat", answer);
     await expect(trace).not.toContainText("进行中");
+    await expect(page.getByRole("button", { name: kind === "planning" ? "打开任务草案" : "打开需求检查报告", exact: true })).toBeVisible();
+    await expect(page.getByLabel("结果详情", { exact: true })).toBeVisible();
   });
 }

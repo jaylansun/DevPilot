@@ -1,10 +1,11 @@
-"""普通聊天独立于规划审批；一条 message 原子保存一轮问答及其执行状态。"""
+"""项目助手会话；一条 message 原子保存一轮结果及其执行状态。"""
 
 from datetime import datetime
 from uuid import UUID, uuid4
 
 from sqlalchemy import (
     JSON,
+    CheckConstraint,
     DateTime,
     ForeignKey,
     Index,
@@ -49,6 +50,10 @@ class ChatMessageDO(Base):
             "session_id", "client_message_id", name="uq_chat_message_client"
         ),
         UniqueConstraint("session_id", "seq", name="uq_chat_message_seq"),
+        CheckConstraint(
+            "intent IN ('auto', 'task_planning', 'requirement_check')",
+            name="ck_chat_message_intent",
+        ),
     )
 
     id: Mapped[UUID] = mapped_column(primary_key=True, default=uuid4)
@@ -58,6 +63,9 @@ class ChatMessageDO(Base):
     client_message_id: Mapped[UUID] = mapped_column()
     seq: Mapped[int] = mapped_column()
     question: Mapped[str] = mapped_column(Text)
+    intent: Mapped[str] = mapped_column(
+        String(24), default="auto", server_default="auto"
+    )
     answer: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     status: Mapped[str] = mapped_column(String(16), default="pending")
     error: Mapped[str | None] = mapped_column(Text, nullable=True)

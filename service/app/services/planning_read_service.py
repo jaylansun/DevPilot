@@ -66,6 +66,16 @@ class PlanningReadService:
         reader.ready_documents = dict(self.ready_documents)
         return reader
 
+    def document_hashes_for_sources(self, sources: list[RagSourceVO]) -> dict[str, str]:
+        """返回已建立基线中工件所用文档的哈希，供最终事务核对。"""
+        if self._snapshot is None:
+            raise RuntimeError("必须先建立读取基线")
+        available = {str(row[0]): row[2] for row in self._snapshot[2]}
+        selected = {str(source.document_id) for source in sources}
+        if not selected <= available.keys():
+            raise self._changed()
+        return {key: available[key] for key in selected}
+
     @staticmethod
     def _changed() -> ApiError:
         return ApiError(
@@ -282,3 +292,30 @@ class PlanningReadService:
         async with self._lock:
             current = await self._read_context(owner_id, project_id)
             self._check_snapshot(current, owner_id, project_id)
+
+    async def assert_unchanged_locked(
+        self, session: AsyncSession, owner_id: UUID, project_id: UUID
+    ) -> None:
+        """最终提交短事务锁定读取范围，复核后保持到消息与草案提交完成。"""
+        project = await session.scalar(
+            select(ProjectDO.id)
+            .where(ProjectDO.id == project_id, ProjectDO.owner_id == owner_id)
+            .with_for_update()
+        )
+        if project is None:
+            raise self._changed()
+        if self.include_tasks:
+            await session.execute(
+                select(TaskDO.id)
+                .where(TaskDO.project_id == project_id)
+                .order_by(TaskDO.id)
+                .with_for_update()
+            )
+        # 包括未就绪文档，避免复核后其他文档刚好完成索引、改变就绪集合。
+        await session.execute(
+            select(DocumentDO.id)
+            .where(DocumentDO.project_id == project_id)
+            .order_by(DocumentDO.id)
+            .with_for_update()
+        )
+        await self.assert_unchanged(owner_id, project_id)

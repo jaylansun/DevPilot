@@ -1,15 +1,21 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from "vue";
 import { useRoute, useRouter } from "vue-router";
-import { ElPopconfirm } from "element-plus";
-import { ArrowDown, ChatLineRound, Document, Refresh, Top } from "@element-plus/icons-vue";
+import { ElDrawer, ElPopconfirm } from "element-plus";
+import { ArrowDown, ChatLineRound, Close, Document, Refresh, Top } from "@element-plus/icons-vue";
 import { sendSessionChat, getChatInfo, listChatSessions, createChatSession, getChatSession, deleteChatSession } from "@/api/chat_api";
 import { ApiError, errorMessage } from "@/api/http_client";
 import RunTrace from "@/components/RunTrace.vue";
 import type { TraceEvent } from "@/types/stream";
 import AiPresence from "@/components/AiPresence.vue";
 import SafeMarkdown from "@/components/SafeMarkdown.vue";
-import type { ChatAnswerVO, ChatInfoVO, ChatSessionVO, SavedChatMessageVO } from "@/types/api";
+import ChatArtifactDetail from "@/components/ChatArtifactDetail.vue";
+import PlanDraftList from "@/components/PlanDraftList.vue";
+import PlanningApprovals from "@/components/PlanningApprovals.vue";
+import ApprovalDetails from "@/components/ApprovalDetails.vue";
+import { getDraft } from "@/api/plan_draft_api";
+import { getApproval } from "@/api/approval_api";
+import type { ApprovalVO, ChatAnswerVO, ChatArtifactVO, ChatInfoVO, ChatIntent, ChatSessionVO, PlanDraftVO, SavedChatMessageVO } from "@/types/api";
 
 const props = defineProps<{ projectId: string }>();
 const route = useRoute();
@@ -18,6 +24,26 @@ const sessionId = ref<string | null>(null);
 const sessions = ref<ChatSessionVO[]>([]);
 const sessionsMore = ref(false);
 const historyOpen = ref(false);
+const recordsOpen = ref(false);
+const recordsTab = ref<"drafts" | "approvals">("drafts");
+const draftsRefresh = ref(0), approvalsRefresh = ref(0);
+const submittedApproval = ref<ApprovalVO | null>(null);
+const artifactBusy = ref(false), artifactEditing = ref(false), linkLoading = ref(false);
+const detailsLocked = computed(() => artifactBusy.value || artifactEditing.value || linkLoading.value);
+const draftStates = ref<Record<string, PlanDraftVO>>({});
+type Detail = { key: string; artifact: ChatArtifactVO; initialDraft?: PlanDraftVO };
+const detail = ref<Detail | null>(null);
+const approvalDetail = ref<ApprovalVO | null>(null);
+const detailOpen = computed(() => !!detail.value || !!approvalDetail.value);
+const mobileDetails = ref(window.innerWidth < 1024);
+const detailTitle = computed(() => approvalDetail.value ? "审批详情" : detail.value?.artifact.type === "task_plan" ? "任务草案" : "需求检查报告");
+const intent = ref<ChatIntent>(route.query.tab === "planning" ? "task_planning" : route.query.tab === "assistant" ? "requirement_check" : "auto");
+const intentOptions: { value: ChatIntent; label: string; placeholder: string }[] = [
+  { value: "auto", label: "自动处理", placeholder: "问问项目，或说说下一步目标…" },
+  { value: "task_planning", label: "生成任务草案", placeholder: "描述目标和范围，例如：完善下单流程，明确任务和验收标准。" },
+  { value: "requirement_check", label: "检查需求缺口", placeholder: "描述检查范围，例如：对照需求文档，检查下单流程还有哪些遗漏。" },
+];
+const inputPlaceholder = computed(() => intentOptions.find(option => option.value === intent.value)!.placeholder);
 const hasOlder = ref(false);
 const sessionLoading = ref(false);
 let sessionRequestId = 0;
@@ -32,17 +58,19 @@ const chatPanel = ref<HTMLElement | null>(null);
 const panelHeight = ref(360);
 const compactPanel = computed(() => panelHeight.value < 560);
 const questionInput = ref<HTMLTextAreaElement | null>(null);
+const detailPanel = ref<HTMLElement | null>(null);
 const messageViewport = ref<HTMLElement | null>(null);
 const followingLatest = ref(true);
 const showLatestButton = ref(false);
 const pendingTurnId = ref<number | null>(null);
 const sending = computed(() => pendingTurnId.value !== null);
 const canAsk = computed(
-  () => !loading.value && !sessionLoading.value && !turns.value.some(t => t.pending) && !loadError.value && !!info.value?.configured,
+  () => !loading.value && !sessionLoading.value && !detailsLocked.value && !turns.value.some(t => t.pending) && !loadError.value && !!info.value?.configured,
 );
 type Turn = {
   id: number;
   question: string;
+  intent: ChatIntent;
   answer?: ChatAnswerVO;
   clientId: string;
   seq?: number;
@@ -66,6 +94,8 @@ let requestController: AbortController | undefined;
 let heightFrame: number | undefined;
 let layoutObserver: ResizeObserver | undefined;
 let scrollingToLatest = false;
+let linkController: AbortController | undefined;
+let linkRequestId = 0;
 
 function updatePanelHeight() {
   const panel = chatPanel.value;
@@ -74,6 +104,7 @@ function updatePanelHeight() {
   const documentTop = panel.getBoundingClientRect().top + window.scrollY;
   const bottomGutter = 16;
   panelHeight.value = Math.max(360, Math.floor(window.innerHeight - documentTop - bottomGutter));
+  mobileDetails.value = window.innerWidth < 1024;
 }
 
 function schedulePanelHeight() {
@@ -173,13 +204,15 @@ function useSuggestion(text: string) {
   questionInput.value?.focus();
 }
 
-function savedTurn(message: SavedChatMessageVO): Turn {
-  return { id: nextId++, clientId: message.client_message_id, seq: message.seq,
-    question: message.question, answer: message.answer ?? undefined, trace: [],
+function savedTurn(message: SavedChatMessageVO, previous?: Turn): Turn {
+  return { id: previous?.id ?? nextId++, clientId: message.client_message_id, seq: message.seq,
+    question: message.question, intent: message.intent ?? "auto", answer: message.answer ?? undefined, trace: [],
     pending: message.status === "pending", error: message.error ?? undefined };
 }
 
 async function selectSession(id: string, close = true) {
+  // 后台恢复仍要轮询当前会话；打开或编辑草案不能让 pending 消息永久停住。
+  if (detailsLocked.value && (close || id !== sessionId.value)) return;
   const version = ++sessionRequestId;
   const project = props.projectId;
   sessionLoading.value = true;
@@ -189,9 +222,10 @@ async function selectSession(id: string, close = true) {
     if (!active || project !== props.projectId || version !== sessionRequestId) return;
     const sameSession = sessionId.value === id;
     const earlier = sameSession ? turns.value.filter(t => t.seq && t.seq < (result.messages[0]?.seq ?? 0)) : [];
-    if (!sameSession) { question.value = ""; formError.value = ""; }
+    const previous = sameSession ? new Map(turns.value.map(turn => [turn.clientId, turn])) : new Map<string, Turn>();
+    if (!sameSession) { question.value = ""; formError.value = ""; detail.value = null; approvalDetail.value = null; }
     sessionId.value = id;
-    turns.value = [...earlier, ...result.messages.map(savedTurn)];
+    turns.value = [...earlier, ...result.messages.map(message => savedTurn(message, previous.get(message.client_message_id)))];
     if (!earlier.length) hasOlder.value = result.has_more;
     if (close) historyOpen.value = false;
     await router.replace({ query: { ...route.query, chat_session: id } });
@@ -212,7 +246,7 @@ async function olderMessages() {
   try {
     const result = await getChatSession(props.projectId, id, turns.value[0].seq);
     if (!active || id !== sessionId.value) return;
-    turns.value.unshift(...result.messages.map(savedTurn));
+    turns.value.unshift(...result.messages.map(message => savedTurn(message)));
     hasOlder.value = result.has_more;
     await nextTick();
     if (viewport) viewport.scrollTop += viewport.scrollHeight - oldHeight;
@@ -235,12 +269,95 @@ async function removeSession(id: string) {
     await deleteChatSession(props.projectId, id);
     if (sessionId.value === id) {
       ++sessionRequestId; clearTimeout(pendingPoll);
-      sessionId.value = null; turns.value = []; hasOlder.value = false;
+      sessionId.value = null; turns.value = []; hasOlder.value = false; detail.value = null; approvalDetail.value = null;
       await router.replace({ query: { ...route.query, chat_session: undefined } });
     }
     await loadSessions();
   } catch (reason) { formError.value = errorMessage(reason); }
 }
+
+function selectIntent(value: ChatIntent) {
+  if (sending.value || detailsLocked.value) return;
+  intent.value = value;
+  formError.value = "";
+  questionInput.value?.focus({ preventScroll: true });
+}
+function artifactSummary(artifact: ChatArtifactVO) {
+  if (artifact.type === "task_plan") {
+    const saved = artifact.draft_id ? draftStates.value[artifact.draft_id] : undefined;
+    const count = saved?.plan.proposal.tasks.length ?? artifact.result.proposal.tasks.length;
+    const version = saved?.version ?? artifact.draft_version;
+    return `${count} 项建议任务${version ? ` · 第 ${version} 版` : ""} · ${saved?.status === "submitted" ? "已提交审批" : artifact.draft_id ? "已保存" : "待保存"}`;
+  }
+  const report = artifact.result.report;
+  return report ? `已覆盖 ${report.covered.length} · 可能遗漏 ${report.missing.length} · 待确认 ${report.questions.length}` : "检查范围与依据已保存在本条消息";
+}
+function openArtifact(turn: Turn, artifact: ChatArtifactVO, index: number) {
+  if (detailsLocked.value) return;
+  approvalDetail.value = null;
+  detail.value = { key: `${turn.clientId}-${index}`, artifact };
+  if (mobileDetails.value) void nextTick(() => detailPanel.value?.scrollIntoView({ block: "start" }));
+  void router.replace({ query: { ...route.query, draft: artifact.type === "task_plan" ? artifact.draft_id ?? undefined : undefined, approval: undefined } });
+}
+function openDraft(draft: PlanDraftVO) {
+  if (sending.value || detailsLocked.value) return;
+  approvalDetail.value = null;
+  draftStates.value[draft.id] = draft;
+  detail.value = { key: `draft-${draft.id}`, initialDraft: draft, artifact: { type: "task_plan", goal: draft.goal, result: draft.plan, draft_id: draft.id, draft_version: draft.version } };
+  recordsOpen.value = false;
+  if (mobileDetails.value) void nextTick(() => detailPanel.value?.scrollIntoView({ block: "start" }));
+  void router.replace({ query: { ...route.query, draft: draft.id, approval: undefined } });
+}
+function updateDraft(draft: PlanDraftVO) { draftStates.value[draft.id] = draft; draftsRefresh.value++; }
+function draftSubmitted(approval: ApprovalVO) { submittedApproval.value = approval; approvalsRefresh.value++; }
+function closeDetail() {
+  if (detailsLocked.value) return;
+  detail.value = null; approvalDetail.value = null;
+  if (mobileDetails.value) void nextTick(() => chatPanel.value?.scrollIntoView({ block: "start" }));
+  void router.replace({ query: { ...route.query, draft: undefined, approval: undefined } });
+}
+function prepareGapPlan(goal: string) {
+  if (sending.value || detailsLocked.value) return;
+  intent.value = "task_planning";
+  question.value = goal.slice(0, 2000);
+  formError.value = "";
+  if (mobileDetails.value) closeDetail();
+  void nextTick(() => questionInput.value?.focus({ preventScroll: true }));
+}
+async function loadLinkedDetail() {
+  const draftId = typeof route.query.draft === "string" ? route.query.draft : undefined;
+  const approvalId = typeof route.query.approval === "string" ? route.query.approval : undefined;
+  if ((!draftId && !approvalId) || detailsLocked.value || sending.value) return;
+  if (draftId && detail.value?.artifact.type === "task_plan" && detail.value.artifact.draft_id === draftId) return;
+  if (!draftId && approvalDetail.value?.id === approvalId) return;
+  linkController?.abort();
+  const current = new AbortController(); linkController = current;
+  const version = ++linkRequestId;
+  linkLoading.value = true;
+  try {
+    if (draftId) {
+      const draft = await getDraft(props.projectId, draftId, current.signal);
+      if (!active || current.signal.aborted || version !== linkRequestId) return;
+      draftStates.value[draft.id] = draft; approvalDetail.value = null;
+      detail.value = { key: `draft-${draft.id}`, initialDraft: draft, artifact: { type: "task_plan", goal: draft.goal, result: draft.plan, draft_id: draft.id, draft_version: draft.version } };
+    } else if (approvalId) {
+      const approval = await getApproval(approvalId, current.signal);
+      if (!active || current.signal.aborted || version !== linkRequestId) return;
+      if (approval.project_id !== props.projectId) throw new Error("这份审批记录不属于当前项目");
+      approvalDetail.value = approval; detail.value = null;
+    }
+  } catch (reason) { if (active && !current.signal.aborted && version === linkRequestId) formError.value = errorMessage(reason); }
+  finally { if (active && version === linkRequestId) linkLoading.value = false; }
+}
+watch(() => [route.query.draft, route.query.approval], () => { if (!loading.value) void loadLinkedDetail(); });
+watch(() => route.query.chat_session, value => {
+  if (typeof value === "string" && value !== sessionId.value && !loading.value && !sending.value && !detailsLocked.value) void selectSession(value);
+});
+watch(detailsLocked, value => {
+  if (value || loading.value || sending.value) return;
+  const id = route.query.chat_session;
+  if (typeof id === "string" && id !== sessionId.value) void selectSession(id);
+});
 
 async function send(retryTurn?: Turn) {
   if (sending.value || !canAsk.value) return;
@@ -251,7 +368,7 @@ async function send(retryTurn?: Turn) {
     return;
   }
   formError.value = "";
-  const turn: Turn = retryTurn ?? { id: nextId++, question: text, clientId: crypto.randomUUID(), trace: [] };
+  const turn: Turn = retryTurn ?? { id: nextId++, question: text, intent: intent.value, clientId: crypto.randomUUID(), trace: [] };
   if (retryTurn) {
     turn.error = undefined;
     turn.answer = undefined;
@@ -274,7 +391,7 @@ async function send(retryTurn?: Turn) {
       sessionId.value = created.id;
       await router.replace({ query: { ...route.query, chat_session: created.id } });
     }
-    const answer = await sendSessionChat(project, sessionId.value, { question: text, client_message_id: turn.clientId }, controller.signal, (event) => {
+    const answer = await sendSessionChat(project, sessionId.value, { question: text, intent: turn.intent, client_message_id: turn.clientId }, controller.signal, (event) => {
       if (!active || controller.signal.aborted || requestId !== answerRequestId) return;
       const item = turns.value.find((value) => value.id === turn.id);
       if (!item) return;
@@ -285,7 +402,11 @@ async function send(retryTurn?: Turn) {
     // 取消后即使底层请求仍然返回，也不能覆盖当前记录或后续提问。
     if (!active || controller.signal.aborted || requestId !== answerRequestId) return;
     const item = turns.value.find((value) => value.id === turn.id);
-    if (item) { item.answer = answer; item.draft = ""; }
+    if (item) {
+      item.answer = answer; item.draft = "";
+      const artifact = answer.artifacts?.[0];
+      if (artifact && !detailsLocked.value) openArtifact(item, artifact, 0);
+    }
     if (question.value.trim() === text) question.value = "";
     void loadSessions();
   } catch (reason) {
@@ -330,7 +451,7 @@ function handleQuestionKeydown(event: KeyboardEvent) {
 }
 
 async function clearHistory() {
-  if (sending.value || sessionLoading.value) return;
+  if (sending.value || sessionLoading.value || detailsLocked.value) return;
   sessionLoading.value = true;
   formError.value = "";
   try {
@@ -338,6 +459,7 @@ async function clearHistory() {
     const result = await createChatSession(project);
     if (!active || project !== props.projectId) return;
     await selectSession(result.id);
+    closeDetail();
     question.value = "";
     await loadSessions();
     questionInput.value?.focus();
@@ -354,6 +476,11 @@ watch(() => props.projectId, () => {
   sessionLoading.value = false;
   hasOlder.value = false;
   historyOpen.value = false;
+  recordsOpen.value = false;
+  detail.value = null; approvalDetail.value = null;
+  draftStates.value = {};
+  artifactBusy.value = false; artifactEditing.value = false;
+  linkController?.abort(); ++linkRequestId; linkLoading.value = false;
   requestController?.abort();
   pendingTurnId.value = null;
   turns.value = [];
@@ -366,7 +493,7 @@ watch(() => props.projectId, () => {
 });
 
 onMounted(() => {
-  void loadInfo();
+  void loadInfo().then(loadLinkedDetail);
   updatePanelHeight();
   resizeQuestionInput();
   window.addEventListener("resize", schedulePanelHeight);
@@ -390,6 +517,7 @@ onBeforeUnmount(() => {
   ++answerRequestId;
   ++infoRequestId;
   requestController?.abort();
+  linkController?.abort(); ++linkRequestId;
   window.removeEventListener("resize", schedulePanelHeight);
   if (heightFrame !== undefined) window.cancelAnimationFrame(heightFrame);
   layoutObserver?.disconnect();
@@ -400,29 +528,32 @@ onBeforeUnmount(() => {
   <section
     ref="chatPanel"
     aria-label="项目聊天助手"
-    class="flex min-h-0 flex-col rounded-[20px] bg-surface pt-2 text-ink max-mobile:pt-1"
-    :style="{ height: panelHeight + 'px' }"
+    class="grid min-h-0 min-w-0 overflow-hidden rounded-[20px] bg-surface text-ink"
+    :class="detailOpen && !mobileDetails ? 'grid-cols-[minmax(0,1fr)_minmax(340px,460px)]' : 'grid-cols-1'"
+    :style="{ height: (panelHeight + (detailOpen && mobileDetails ? Math.min(520, panelHeight) : 0)) + 'px', gridTemplateRows: detailOpen && mobileDetails ? `${panelHeight}px ${Math.min(520, panelHeight)}px` : 'minmax(0,1fr)' }"
   >
-    <header class="mx-auto flex w-full max-w-[940px] shrink-0 items-center justify-between gap-3 px-6 py-1 max-mobile:px-2">
+    <div class="flex min-h-0 min-w-0 flex-col overflow-hidden pt-2 max-mobile:pt-1">
+    <header class="mx-auto flex w-full max-w-[940px] shrink-0 flex-wrap items-center justify-between gap-x-3 gap-y-0 px-6 py-1 max-mobile:px-2">
       <div class="flex min-w-0 items-center gap-2.5">
         <el-icon aria-hidden="true" class="text-brand" :size="18"><ChatLineRound /></el-icon>
         <h2 class="m-0 text-sm font-semibold">项目助手</h2>
-        <span class="text-xs text-muted max-mobile:hidden">{{ loading ? "正在读取状态" : info?.ready_documents ? info.ready_documents + " 份资料可查询" : "随时开始聊天" }}</span>
+        <span v-if="!detailOpen" class="text-xs text-muted max-mobile:hidden">{{ loading ? "正在读取状态" : info?.ready_documents ? info.ready_documents + " 份资料可查询" : "随时开始聊天" }}</span>
       </div>
       <div class="flex shrink-0 items-center gap-1">
         <button
           type="button"
           class="min-h-11 cursor-pointer rounded-xl px-3 text-xs text-muted transition-colors hover:bg-raised/70 hover:text-ink focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-40"
-          :disabled="sending || sessionLoading"
+          :disabled="sending || sessionLoading || detailsLocked"
           @click="clearHistory"
         >新对话</button>
-        <button type="button" class="min-h-11 cursor-pointer rounded-xl px-2 text-xs text-muted hover:bg-raised" :disabled="sending || sessionLoading" @click="historyOpen = true; loadSessions()">历史</button>
+        <button type="button" class="min-h-11 cursor-pointer rounded-xl px-2 text-xs text-muted hover:bg-raised" :disabled="sending || sessionLoading || detailsLocked" @click="historyOpen = true; loadSessions()">历史</button>
+        <button type="button" class="min-h-11 cursor-pointer rounded-xl px-2 text-xs text-muted hover:bg-raised disabled:opacity-40" :disabled="sending || detailsLocked" @click="recordsOpen = true">草案与审批</button>
         <button
           type="button"
           aria-label="刷新问答状态"
           title="刷新问答状态"
           class="flex size-11 cursor-pointer items-center justify-center rounded-xl text-muted transition-colors hover:bg-raised/70 hover:text-brand focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-40"
-          :disabled="sending || loading"
+          :disabled="sending || loading || detailsLocked"
           @click="loadInfo"
         ><el-icon aria-hidden="true" :size="17" :class="{ 'animate-spin motion-reduce:animate-none': loading }"><Refresh /></el-icon></button>
       </div>
@@ -446,7 +577,7 @@ onBeforeUnmount(() => {
           <template v-else-if="info">
             <p class="m-0 text-center text-xs leading-5 text-muted" role="status">
               <template v-if="info.mode === 'mock'">演示模式：固定问候与真实资料查询，不调用大模型。</template>
-              <template v-else>可以自由聊天，也可以查询项目资料和任务；项目回答请核对依据。</template>
+              <template v-else>可以自由聊天、查询资料与任务，也能生成草案和检查需求；项目回答请核对依据。</template>
             </p>
             <p v-if="!info.configured" class="ui-error mb-0 mt-3" role="alert">
               聊天模型尚未配置，请联系管理员完成配置后刷新。
@@ -463,7 +594,7 @@ onBeforeUnmount(() => {
             <div class="shrink-0" :class="compactPanel ? 'size-8' : 'size-[88px] max-mobile:size-[72px]'"><AiPresence /></div>
             <h3 class="mb-0 leading-[1.35] font-semibold tracking-[-0.03em] text-balance" :class="compactPanel ? 'mt-0 text-2xl max-mobile:text-xl' : 'mt-3 text-[28px] max-mobile:mt-2 max-mobile:text-2xl'">聊聊想法，也聊聊项目</h3>
           </div>
-          <p class="mb-0 mt-2 text-[15px] text-muted max-mobile:text-sm" :class="compactPanel ? 'leading-6' : 'leading-7'">自由提问，按需查资料、看任务，也能接着聊。</p>
+          <p class="mb-0 mt-2 text-[15px] text-muted max-mobile:text-sm" :class="compactPanel ? 'leading-6' : 'leading-7'">直接描述你的问题或目标，资料、草案和检查结果都在这里接着看。</p>
           <div class="flex flex-wrap justify-center gap-2.5 max-mobile:gap-2" :class="compactPanel ? 'mt-2' : 'mt-5 max-mobile:mt-4'" aria-label="推荐问题">
             <button
               v-for="suggestion in suggestions"
@@ -505,7 +636,7 @@ onBeforeUnmount(() => {
               <div class="min-w-0 flex-1">
                 <p class="mb-3 mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-sm font-semibold">
                   项目助手
-                  <span v-if="turn.answer" class="text-xs font-normal text-muted">{{ turn.answer.mode === "mock" ? "演示回答" : "AI 回答" }}<span class="ml-2">{{ turn.answer.status === "insufficient_evidence" ? "资料不足" : turn.answer.basis === "general" ? "自由交流" : turn.answer.sources.length ? "附来源引用" : "任务查询" }}</span></span>
+                  <span v-if="turn.answer" class="text-xs font-normal text-muted">{{ turn.answer.mode === "mock" ? "演示回答" : "AI 回答" }}<span class="ml-2">{{ turn.answer.status === "insufficient_evidence" ? "资料不足" : turn.answer.basis === "general" ? "未查询项目资料" : turn.answer.artifacts?.length ? "结果已保存" : turn.answer.sources.length ? "附来源引用" : "任务查询" }}</span></span>
                 </p>
                 <RunTrace :events="turn.trace" :running="pendingTurnId === turn.id" />
                 <Transition
@@ -526,6 +657,13 @@ onBeforeUnmount(() => {
                   </div>
                   <div v-else-if="turn.answer" key="answer">
                     <SafeMarkdown :content="turn.answer.answer" />
+                    <div v-if="turn.answer.artifacts?.length" class="mt-4 space-y-3" aria-label="本次生成结果">
+                      <button v-for="(artifact, index) in turn.answer.artifacts" :key="`${turn.clientId}-${index}`" type="button" class="block w-full cursor-pointer rounded-xl border border-brand/20 bg-brand/3 p-4 text-left transition-colors hover:border-brand/50 focus-visible:outline-2 focus-visible:outline-brand disabled:cursor-not-allowed disabled:opacity-50" :disabled="detailsLocked" :aria-label="artifact.type === 'task_plan' ? '打开任务草案' : '打开需求检查报告'" :aria-pressed="detail?.key === `${turn.clientId}-${index}`" @click="openArtifact(turn, artifact, index)">
+                        <span class="block text-sm font-semibold">{{ artifact.type === 'task_plan' ? '任务草案' : '需求检查报告' }}</span>
+                        <span class="mt-1 block text-xs leading-6 text-muted">{{ artifactSummary(artifact) }}</span>
+                        <span class="mt-2 block text-xs text-brand">展开详情 →</span>
+                      </button>
+                    </div>
                     <details v-if="turn.answer.tasks.length" class="mt-5 rounded-xl border border-line/80 px-4 py-3" aria-label="查询到的任务">
                       <summary class="cursor-pointer text-sm text-muted">{{ turn.answer.tasks.length }} 项相关任务，可展开核对</summary>
                       <ul class="mb-0 mt-3 space-y-3 pl-4">
@@ -578,6 +716,9 @@ onBeforeUnmount(() => {
         </div>
       </Transition>
       <form class="mx-auto max-w-[800px]" @submit.prevent="send()">
+        <div class="mb-2 flex flex-wrap gap-1.5" aria-label="本次操作">
+          <button v-for="option in intentOptions" :key="option.value" type="button" class="min-h-9 cursor-pointer rounded-full border px-3 text-xs transition-colors aria-pressed:border-brand/40 aria-pressed:bg-brand/8 aria-pressed:text-brand disabled:cursor-not-allowed disabled:opacity-40" :class="intent === option.value ? 'border-brand/40' : 'border-line text-muted hover:text-brand'" :aria-pressed="intent === option.value" :disabled="sending || detailsLocked" @click="selectIntent(option.value)">{{ option.label }}</button>
+        </div>
         <div class="rounded-[22px] border border-line bg-surface px-4 pb-3 pt-3 shadow-lg shadow-ink/5 transition-[border-color,box-shadow] duration-200 focus-within:border-brand/60 focus-within:ring-2 focus-within:ring-brand/15 max-mobile:px-3">
           <label for="knowledge-question" class="mb-0.5 block text-xs font-medium text-muted">你想了解什么？</label>
           <textarea
@@ -587,7 +728,7 @@ onBeforeUnmount(() => {
             rows="1"
             maxlength="2000"
             class="block min-h-12 w-full resize-none border-0 bg-transparent py-2 text-base leading-7 text-ink placeholder:text-muted/80 focus:outline-0 disabled:cursor-not-allowed disabled:opacity-40"
-            placeholder="聊聊想法，或问问项目资料和任务…"
+            :placeholder="inputPlaceholder"
             aria-describedby="knowledge-input-help knowledge-history-help"
             :aria-invalid="!!formError"
             :aria-errormessage="formError ? 'knowledge-form-error' : undefined"
@@ -605,9 +746,20 @@ onBeforeUnmount(() => {
             </button>
           </div>
         </div>
-        <p id="knowledge-history-help" class="mb-0 mt-2.5 text-center text-xs leading-5 text-muted">会话自动保存，可在历史中继续对话；新会话不会带入其他会话的内容。</p>
+        <p id="knowledge-history-help" class="mb-0 mt-2.5 text-center text-xs leading-5 text-muted">{{ intent === 'task_planning' ? '草案自动保存，核对或编辑后提交审批，批准后才加入看板。' : intent === 'requirement_check' ? '报告随消息保存，检查范围与结论可以展开核对。' : '会话与生成结果自动保存，可以在历史中继续。' }}</p>
       </form>
     </div>
+    </div>
+    <aside v-if="detailOpen" ref="detailPanel" aria-label="结果详情" class="flex min-h-0 min-w-0 flex-col overflow-hidden bg-canvas/50" :class="mobileDetails ? 'border-t border-line' : 'border-l border-line'">
+      <header class="flex shrink-0 items-center justify-between gap-3 border-b border-line px-4 py-2">
+        <h2 class="m-0 text-sm font-semibold">{{ detailTitle }}</h2>
+        <button type="button" aria-label="关闭结果详情" class="flex size-11 cursor-pointer items-center justify-center rounded-xl text-muted hover:bg-raised focus-visible:outline-brand disabled:opacity-40" :disabled="detailsLocked" @click="closeDetail"><el-icon :size="18"><Close /></el-icon></button>
+      </header>
+      <div class="min-h-0 min-w-0 flex-1 overflow-y-auto overscroll-contain p-4">
+        <ChatArtifactDetail v-if="detail" :key="detail.key" :project-id="projectId" :artifact="detail.artifact" :initial-draft="detail.initialDraft" :source-prefix="`chat-artifact-${detail.key}`" :disabled="sending" @update="updateDraft" @submitted="draftSubmitted" @busy="artifactBusy = $event" @editing="artifactEditing = $event" @plan="prepareGapPlan" />
+        <ApprovalDetails v-else-if="approvalDetail" :approval="approvalDetail" />
+      </div>
+    </aside>
     <el-dialog v-model="historyOpen" title="会话历史" width="min(620px, 94vw)" class="ui-dialog" destroy-on-close>
       <p v-if="formError" role="alert" class="ui-error">{{ formError }}</p>
       <p class="text-sm text-muted">会话保存在账号下。删除后将清除这段对话的记录和上下文。</p>
@@ -623,6 +775,14 @@ onBeforeUnmount(() => {
       </div>
       <el-button v-if="sessionsMore" @click="loadSessions(true)">更多会话</el-button>
     </el-dialog>
+    <el-drawer v-if="recordsOpen" v-model="recordsOpen" title="草案与审批记录" size="min(620px, 100vw)" append-to-body destroy-on-close>
+      <div class="work-view-switch mb-4" aria-label="保存的结果">
+        <button type="button" :aria-pressed="recordsTab === 'drafts'" @click="recordsTab = 'drafts'">已保存草案</button>
+        <button type="button" :aria-pressed="recordsTab === 'approvals'" @click="recordsTab = 'approvals'">审批记录</button>
+      </div>
+      <PlanDraftList v-if="recordsTab === 'drafts'" :project-id="projectId" :refresh-key="draftsRefresh" :selected-id="detail?.artifact.type === 'task_plan' ? detail.artifact.draft_id ?? undefined : undefined" :disabled="sending || detailsLocked" @select="openDraft" />
+      <PlanningApprovals v-else :project-id="projectId" :refresh-key="approvalsRefresh" :selected-approval="submittedApproval" :disabled="sending || detailsLocked" />
+    </el-drawer>
 
   </section>
 </template>

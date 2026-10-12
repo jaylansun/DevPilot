@@ -707,6 +707,14 @@ export interface components {
       status: "answered" | "insufficient_evidence" | "demo";
 
       mode: "mock" | "live";
+
+      artifacts?: (components["schemas"]["ChatPlanArtifactVO"] | components["schemas"]["ChatCheckArtifactVO"])[];
+    };
+
+    ChatCheckArtifactVO: {
+
+      type: "requirement_check";
+      result: components["schemas"]["WorkflowResultVO"];
     };
 
     ChatInfoVO: {
@@ -725,9 +733,23 @@ export interface components {
       content: string;
     };
 
+    ChatPlanArtifactVO: {
+
+      type: "task_plan";
+
+      goal: string;
+      result: components["schemas"]["PlanResultVO"];
+
+      draft_id?: string | null;
+
+      draft_version?: number | null;
+    };
+
     ChatRequestQO: {
 
       question: string;
+
+      intent: "auto" | "task_planning" | "requirement_check";
 
       history?: components["schemas"]["ChatMessageQO"][];
     };
@@ -1039,6 +1061,8 @@ export interface components {
       seq: number;
 
       question: string;
+
+      intent: "auto" | "task_planning" | "requirement_check";
       answer: components["schemas"]["ChatAnswerVO"] | null;
 
       status: "pending" | "completed" | "failed" | "cancelled";
@@ -1061,6 +1085,8 @@ export interface components {
       question: string;
 
       client_message_id: string;
+
+      intent: "auto" | "task_planning" | "requirement_check";
     };
 
     SessionVO: {
@@ -1190,7 +1216,7 @@ export interface components {
 
     ToolCallVO: {
 
-      name: "search_documents" | "read_task_board";
+      name: "search_documents" | "read_task_board" | "generate_task_plan" | "check_requirements";
 
       status: "success" | "empty";
 

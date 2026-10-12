@@ -9,8 +9,6 @@ import ProjectDialog from "@/components/ProjectDialog.vue";
 import TaskBoard from "@/components/TaskBoard.vue";
 import DocumentLibrary from "@/components/DocumentLibrary.vue";
 import KnowledgeChat from "@/components/KnowledgeChat.vue";
-import TaskPlanning from "@/components/TaskPlanning.vue";
-import RequirementCheck from "@/components/RequirementCheck.vue";
 import ProjectTabs from "@/components/ProjectTabs.vue";
 import type { ProjectVO } from "@/types/api";
 
@@ -19,7 +17,11 @@ const project = ref<ProjectVO | null>(null);
 const loading = ref(true);
 const error = ref("");
 const editing = ref(false);
-const activeComponent = computed(() => ({ tasks: TaskBoard, documents: DocumentLibrary, chat: KnowledgeChat, planning: TaskPlanning, assistant: RequirementCheck })[String(route.query.tab) as "tasks" | "documents" | "chat" | "planning" | "assistant"]);
+const activeTab = computed(() => {
+  const tab = String(route.query.tab || "");
+  return ["chat", "planning", "assistant"].includes(tab) ? "chat" : tab;
+});
+const activeComponent = computed(() => ({ tasks: TaskBoard, documents: DocumentLibrary, chat: KnowledgeChat })[activeTab.value as "tasks" | "documents" | "chat"]);
 
 async function loadProject() {
   loading.value = true;
@@ -60,7 +62,7 @@ onMounted(loadProject);
       </div>
       <ProjectTabs />
       <Transition name="content" mode="out-in">
-      <component v-if="activeComponent" :is="activeComponent" :key="String(route.query.tab)" :project-id="project.id" />
+      <component v-if="activeComponent" :is="activeComponent" :key="`${project.id}:${activeTab}`" :project-id="project.id" />
       <div v-else class="work-scroll grid grid-cols-[minmax(0,1fr)_280px] items-start gap-5 max-tablet:grid-cols-1">
         <article class="ui-panel">
           <div class="flex items-center gap-3 pb-2">
@@ -71,10 +73,10 @@ onMounted(loadProject);
         <aside class="space-y-5">
           <div class="p-1">
             <h2 class="mb-4 text-base">继续推进项目</h2>
-            <RouterLink :to="{path: route.path, query: {tab: 'assistant'}}" class="ui-interactive mb-2 flex min-h-12 items-center gap-3 rounded-xl bg-white px-4 text-sm hover:text-brand hover:shadow-soft"><el-icon><Aim /></el-icon>检查需求与任务缺口</RouterLink>
-            <RouterLink :to="{path: route.path, query: {tab: 'documents'}}" class="ui-interactive mb-2 flex min-h-12 items-center gap-3 rounded-xl bg-white px-4 text-sm hover:text-brand hover:shadow-soft"><el-icon><Files /></el-icon>管理项目资料</RouterLink>
-            <RouterLink :to="{path: route.path, query: {tab: 'chat'}}" class="ui-interactive mb-2 flex min-h-12 items-center gap-3 rounded-xl bg-white px-4 text-sm hover:text-brand hover:shadow-soft"><el-icon><ChatDotRound /></el-icon>向项目知识提问</RouterLink>
-            <RouterLink :to="{path: route.path, query: {tab: 'planning'}}" class="ui-interactive flex min-h-12 items-center gap-3 rounded-xl bg-white px-4 text-sm hover:text-brand hover:shadow-soft"><el-icon><Aim /></el-icon>生成行动方案</RouterLink>
+            <RouterLink :to="{path: route.path, query: {...route.query, tab: 'assistant'}}" class="ui-interactive mb-2 flex min-h-12 items-center gap-3 rounded-xl bg-white px-4 text-sm hover:text-brand hover:shadow-soft"><el-icon><Aim /></el-icon>检查需求与任务缺口</RouterLink>
+            <RouterLink :to="{path: route.path, query: {...route.query, tab: 'documents'}}" class="ui-interactive mb-2 flex min-h-12 items-center gap-3 rounded-xl bg-white px-4 text-sm hover:text-brand hover:shadow-soft"><el-icon><Files /></el-icon>管理项目资料</RouterLink>
+            <RouterLink :to="{path: route.path, query: {...route.query, tab: 'chat'}}" class="ui-interactive mb-2 flex min-h-12 items-center gap-3 rounded-xl bg-white px-4 text-sm hover:text-brand hover:shadow-soft"><el-icon><ChatDotRound /></el-icon>打开项目助手</RouterLink>
+            <RouterLink :to="{path: route.path, query: {...route.query, tab: 'planning'}}" class="ui-interactive flex min-h-12 items-center gap-3 rounded-xl bg-white px-4 text-sm hover:text-brand hover:shadow-soft"><el-icon><Aim /></el-icon>生成行动方案</RouterLink>
           </div>
           <div class="border-t border-line/80 px-1 pt-5">
             <h2 class="mb-4 text-sm">项目信息</h2>

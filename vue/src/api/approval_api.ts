@@ -9,6 +9,9 @@ export function createConversation(projectId: string, goal: string, signal?: Abo
 export function listConversations(projectId: string, offset = 0, signal?: AbortSignal) {
   return request<ConversationVO[]>(`/projects/${projectId}/conversations?offset=${offset}&limit=20`, { signal });
 }
+export function getConversation(id: string, signal?: AbortSignal) {
+  return request<ConversationVO>(`/conversations/${id}`, { signal });
+}
 export function runConversation(id: string, signal: AbortSignal, onEvent: (event: ProgressEvent) => void) {
   return streamRequest(`/conversations/${id}/runs/stream`, "approval", undefined, signal, onEvent);
 }

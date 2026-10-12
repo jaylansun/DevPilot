@@ -51,15 +51,6 @@ async def lifespan(application: FastAPI):
         saver = await stack.enter_async_context(
             open_checkpointer(settings.database_url)
         )
-        application.state.chat_service = ChatService(
-            settings,
-            index_service,
-            AsyncSessionFactory,
-            ChatModelService(settings, saver),
-        )
-        application.state.chat_sessions = ChatSessionService(
-            AsyncSessionFactory, application.state.chat_service
-        )
         application.state.approval_service = ApprovalService(
             AsyncSessionFactory, application.state.plan_service, saver
         )
@@ -67,6 +58,19 @@ async def lifespan(application: FastAPI):
             AsyncSessionFactory,
             application.state.plan_service,
             application.state.approval_service,
+        )
+        application.state.chat_service = ChatService(
+            settings,
+            index_service,
+            AsyncSessionFactory,
+            ChatModelService(settings, saver),
+            planner=application.state.plan_service,
+            workflow=application.state.workflow_service,
+        )
+        application.state.chat_sessions = ChatSessionService(
+            AsyncSessionFactory,
+            application.state.chat_service,
+            application.state.plan_draft_service,
         )
         worker = DocumentWorkerService(AsyncSessionFactory, index_service)
         task = asyncio.create_task(worker.run(), name="document-index-worker")

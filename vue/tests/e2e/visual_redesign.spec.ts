@@ -1,6 +1,8 @@
 import { ChatFixture } from "./chat_fixture";
 import { finalResponse, savedDraft } from "./stream_helpers";
 import { expect, test, type Page } from "@playwright/test";
+import { planAnswer, planningResult } from "./unified_fixture";
+import type { ChatAnswerVO, PlanDraftVO, SessionMessageQO } from "../../src/types/api";
 
 const projectId = "11111111-1111-4111-8111-111111111111";
 const documentId = "22222222-2222-4222-8222-222222222222";
@@ -17,6 +19,9 @@ const source = {
 async function workspace(page: Page) {
   await page.addInitScript(() => sessionStorage.setItem("devpilot.access_token", "visual-test-token"));
   const chatFixture = new ChatFixture();
+  const plan = planningResult();
+  plan.sources = [source];
+  const draft = savedDraft(projectId, "完善下单流程", plan) as PlanDraftVO;
   await page.route("**/api/v1/**", async (route) => {
     if (await chatFixture.handle(route)) return;
     const path = new URL(route.request().url()).pathname;
@@ -24,18 +29,15 @@ async function workspace(page: Page) {
     if (path === "/api/v1/projects") return route.fulfill({ json: { items: [project, { ...project, id: documentId, name: "团队知识空间", description: "集中整理团队文档，让每个问题都能找到可以核对的依据。" }], total: 2 } });
     if (path === `/api/v1/projects/${projectId}`) return route.fulfill({ json: project });
     if (path.endsWith("/chat")) return route.fulfill({ json: { mode: "mock", configured: true, ready_documents: 3 } });
-    if (/\/chat\/sessions\/[^/]+\/messages\/stream$/.test(path)) return route.fulfill(finalResponse("chat", { basis: "project", tasks: [], tool_calls: [{ name: "search_documents", status: "success", item_count: 1 }], mode: "mock", status: "answered", answer: "### 下单前需要确认三件事\n\n1. **配送信息**：收货人、手机号和配送地址。\n2. **商品库存**：提交前再次校验，避免超卖。\n3. **异常处理**：库存不足时保留购物车，提示调整数量。\n\n这些要求来自项目中的订单流程说明。[1]", sources: [source] }));
-    if (path.endsWith("/planning")) return route.fulfill({ json: { mode: "mock", configured: true, ready_documents: 3, task_count: 2 } });
+    if (/\/chat\/sessions\/[^/]+\/messages\/stream$/.test(path)) {
+      const payload = route.request().postDataJSON() as SessionMessageQO;
+      const answer: ChatAnswerVO = payload.intent === "task_planning" ? planAnswer(payload.question, draft.plan, draft) : { basis: "project", tasks: [], tool_calls: [{ name: "search_documents", status: "success", item_count: 1 }], mode: "mock", status: "demo", answer: "### 下单前需要确认三件事\n\n1. **配送信息**：收货人、手机号和配送地址。\n2. **商品库存**：提交前再次校验，避免超卖。\n3. **异常处理**：库存不足时保留购物车，提示调整数量。\n\n这些要求来自项目中的订单流程说明。[1]", sources: [source], artifacts: [] };
+      chatFixture.record(path, payload, answer);
+      return route.fulfill(finalResponse("chat", answer));
+    }
+    if (path.endsWith(`/planning/drafts/${draft.id}`)) return route.fulfill({ json: draft });
     if (path.endsWith("/conversations")) return route.fulfill({ json: [] });
-    if (path.endsWith("/planning/drafts")) return route.fulfill({ json: { items: [], total: 0, offset: 0, limit: 20 } });
-    if (path.endsWith("/planning/drafts/stream")) return route.fulfill(finalResponse("draft", savedDraft(projectId, "完善下单流程", {
-      mode: "mock", persisted: false, board_task_count: 2, sources: [source],
-      tool_calls: [{ name: "search_documents", status: "success", item_count: 1 }, { name: "read_task_board", status: "success", item_count: 2 }],
-      proposal: { summary: "先建立可靠的订单校验，再串联顾客下单流程。以可验证的验收标准控制交付范围。", assumptions: ["沿用现有登录与商品数据。"], risks: ["并发下单可能导致库存竞争，需要原子扣减。"], tasks: [
-        { draft_id: "T1", title: "完善订单信息校验", description: "检查收货人、手机号与配送地址，给出清晰的错误提示。", priority: 1, acceptance_criteria: "信息缺失时阻止提交；补全有效信息后可继续下单。", dependencies: [], source_ids: [1] },
-        { draft_id: "T2", title: "串联库存检查与下单", description: "提交前检查可售库存，保留失败时的购物车内容。", priority: 2, acceptance_criteria: "库存不足时显示原因，不产生无效订单。", dependencies: ["T1"], source_ids: [1] },
-      ] },
-    })));
+    if (path.endsWith("/planning/drafts")) return route.fulfill({ json: { items: [draft], total: 1, offset: 0, limit: 20 } });
     return route.fulfill({ status: 404, json: {} });
   });
 }
@@ -148,7 +150,7 @@ test("浅色项目与聊天空态，输入框在双端首屏可达", async ({ pa
   await page.screenshot({ animations: "disabled", path: "test-results/screenshots/redesign-chat-mobile.png", fullPage: true });
 });
 
-test("规划左右工作区与无WebGL降级不阻断业务", async ({ page }) => {
+test("统一助手规划详情与无WebGL降级不阻断业务", async ({ page }) => {
   await workspace(page);
   await page.addInitScript(() => {
     const getContext = HTMLCanvasElement.prototype.getContext;
@@ -163,14 +165,15 @@ test("规划左右工作区与无WebGL降级不阻断业务", async ({ page }) =
   await expect(page.getByTestId("ai-presence")).toHaveAttribute("data-motion", "fallback");
   await expect(page.getByTestId("ai-presence").locator("button")).toHaveCount(0);
   await expect(page.getByLabel("你想了解什么？")).toBeEnabled();
-  await page.getByRole("link", { name: "任务规划", exact: true }).click();
-  await expect(page.getByLabel("你想完成什么目标？")).toBeEnabled();
-  await page.screenshot({ animations: "disabled", path: "test-results/screenshots/redesign-planning-empty.png", fullPage: true });
-  await page.getByLabel("你想完成什么目标？").fill("完善顾客下单流程，覆盖信息校验、库存检查和异常处理。");
   await page.getByRole("button", { name: "生成任务草案", exact: true }).click();
-  await expect(page.getByRole("region", { name: "任务方案预览" })).toBeVisible();
+  await expect(page.getByLabel("你想了解什么？")).toBeEnabled();
+  await page.screenshot({ animations: "disabled", path: "test-results/screenshots/redesign-planning-empty.png", fullPage: true });
+  await page.getByLabel("你想了解什么？").fill("完善顾客下单流程，覆盖信息校验、库存检查和异常处理。");
+  await page.getByRole("button", { name: "发送问题", exact: true }).click();
+  await expect(page.getByLabel("结果详情", { exact: true })).toBeVisible();
   await page.screenshot({ animations: "disabled", path: "test-results/screenshots/redesign-planning-result.png", fullPage: true });
-  await expect(page.getByRole("button", { name: "重新生成草案", exact: true })).toBeInViewport();
+  await expect(page.getByRole("button", { name: "发送问题", exact: true })).toBeInViewport();
+  await expect(page.getByRole("button", { name: "打开任务草案", exact: true })).toBeVisible();
 });
 
 test("布局切换、快速标签切换与减少动态模式保持可操作", async ({ page }) => {
@@ -197,11 +200,11 @@ test("布局切换、快速标签切换与减少动态模式保持可操作", as
   await expect(page.getByRole("button", { name: "收起侧栏", exact: true })).toBeFocused();
   await page.goto(`/projects/${projectId}?tab=chat`);
   const tabs = page.getByRole("navigation", { name: "项目功能" });
-  await tabs.getByRole("link", { name: "任务规划", exact: true }).click();
+  await page.getByRole("button", { name: "生成任务草案", exact: true }).click();
   await tabs.getByRole("link", { name: "项目概览", exact: true }).click();
-  await tabs.getByRole("link", { name: "AI 问答", exact: true }).click();
+  await tabs.getByRole("link", { name: "项目助手", exact: true }).click();
   await expect(page.getByLabel("你想了解什么？")).toBeEnabled();
-  await expect(tabs.getByRole("link", { name: "AI 问答", exact: true })).toHaveAttribute("aria-current", "page");
+  await expect(tabs.getByRole("link", { name: "项目助手", exact: true })).toHaveAttribute("aria-current", "page");
   await page.emulateMedia({ reducedMotion: "reduce" });
   await expect(tabs.locator(":scope > span")).toHaveCSS("transition-duration", "0s");
   await page.setViewportSize({ width: 812, height: 375 });

@@ -10,13 +10,24 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 
 class DemoChatModel(BaseChatModel):
     summarizing: bool = False
+    available_tool_names: tuple[str, ...] = ()
 
     @property
     def _llm_type(self):
         return "devpilot-chat-demo"
 
     def bind_tools(self, tools, **kwargs):
-        return self
+        names = []
+        for bound_tool in tools:
+            if isinstance(bound_tool, dict):
+                name = bound_tool.get("function", bound_tool).get("name")
+            else:
+                name = getattr(
+                    bound_tool, "name", getattr(bound_tool, "__name__", None)
+                )
+            if name:
+                names.append(name)
+        return self.model_copy(update={"available_tool_names": tuple(names)})
 
     def _generate(self, messages, stop=None, run_manager=None, **kwargs):
         if self.summarizing:
@@ -48,7 +59,15 @@ class DemoChatModel(BaseChatModel):
         if output:
             data = json.loads(output.content)
             result["basis"] = "project"
-            if output.name == "read_task_board":
+            if output.name in {"generate_task_plan", "check_requirements"}:
+                result["answer"] = (
+                    data["summary"]
+                    + "\n\n当前为演示模式，请展开结果查看实际资料、范围及演示限制。"
+                )
+                result["insufficient_evidence"] = (
+                    data.get("status") == "insufficient_evidence"
+                )
+            elif output.name == "read_task_board":
                 result["answer"] = (
                     f"演示模式读取到 {data['total']} 项任务，未调用模型进行语义筛选。请查看下方实际看板记录。"
                 )
@@ -76,12 +95,21 @@ class DemoChatModel(BaseChatModel):
             "讲个笑话",
             "聊聊天",
         }:
-            name = (
-                "read_task_board"
-                if "任务" in question or "看板" in question
-                else "search_documents"
-            )
-            args = {} if name == "read_task_board" else {"query": question}
+            if "check_requirements" in self.available_tool_names and any(
+                word in question for word in ("检查", "遗漏", "覆盖", "缺口", "对照")
+            ):
+                name, args = "check_requirements", {"scope": question}
+            elif "generate_task_plan" in self.available_tool_names and any(
+                word in question for word in ("规划", "拆解", "拆分", "草案")
+            ):
+                name, args = "generate_task_plan", {"goal": question}
+            else:
+                name = (
+                    "read_task_board"
+                    if "任务" in question or "看板" in question
+                    else "search_documents"
+                )
+                args = {} if name == "read_task_board" else {"query": question}
         return ChatResult(
             generations=[
                 ChatGeneration(

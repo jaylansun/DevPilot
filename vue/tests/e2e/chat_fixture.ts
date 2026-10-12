@@ -1,19 +1,19 @@
 import { randomUUID } from "node:crypto";
 import type { Route } from "@playwright/test";
-import type { ChatAnswerVO, ChatSessionVO, SavedChatMessageVO } from "../../src/types/api";
+import type { ChatAnswerVO, ChatIntent, ChatSessionVO, SavedChatMessageVO } from "../../src/types/api";
 
 export class ChatFixture {
   sessions: ChatSessionVO[] = [];
   messages = new Map<string, SavedChatMessageVO[]>();
 
-  record(path: string, payload: { question: string; client_message_id: string }, answer: ChatAnswerVO) {
+  record(path: string, payload: { question: string; client_message_id: string; intent?: ChatIntent }, answer: ChatAnswerVO) {
     const id = path.split("/sessions/")[1]!.split("/")[0]!;
     const session = this.sessions.find(s => s.id === id)!;
     const messages = this.messages.get(id)!;
     const old = messages.find(m => m.client_message_id === payload.client_message_id);
     if (old) { old.answer = answer; old.status = "completed"; return; }
     messages.push({ id: randomUUID(), client_message_id: payload.client_message_id, question: payload.question,
-      seq: messages.length + 1, answer, status: "completed", error: null, created_at: new Date().toISOString() });
+      intent: payload.intent ?? "auto", seq: messages.length + 1, answer, status: "completed", error: null, created_at: new Date().toISOString() });
     if (messages.length === 1) session.title = payload.question;
     session.updated_at = new Date().toISOString();
   }

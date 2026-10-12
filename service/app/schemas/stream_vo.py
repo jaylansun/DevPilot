@@ -27,6 +27,8 @@ StepName = Literal[
     "draft_proposal",
     "search_documents",
     "read_task_board",
+    "generate_task_plan",
+    "check_requirements",
     "submit_approval",
     "apply_approval",
 ]

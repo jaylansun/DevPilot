@@ -12,6 +12,7 @@ from pydantic import BaseModel
 from app.errors import ApiError
 from app.services.run_events import EventPublisher, RunEventChannel
 from app.services.run_limits import (
+    CHAT_STREAM_TIMEOUT_SECONDS,
     DEFAULT_STREAM_TIMEOUT_SECONDS,
     PLANNING_STREAM_TIMEOUT_SECONDS,
 )
@@ -41,7 +42,7 @@ class StreamRunner:
             else (
                 PLANNING_STREAM_TIMEOUT_SECONDS
                 if kind in ("planning", "approval", "draft")
-                else 115
+                else CHAT_STREAM_TIMEOUT_SECONDS
                 if kind == "chat"
                 else DEFAULT_STREAM_TIMEOUT_SECONDS
             )

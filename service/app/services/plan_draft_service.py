@@ -7,7 +7,7 @@ from app.errors import ApiError
 from app.models.approval_do import ConversationDO
 from app.models.plan_draft_do import PlanDraftDO
 from app.models.task_do import TaskDO
-from app.models.user_do import UserRole
+from app.models.user_do import UserDO, UserRole
 from app.repositories.project_repository import get_owned_project
 from app.schemas.plan_draft_qo import DraftSubmitQO, DraftUpdateQO
 from app.schemas.plan_draft_vo import PlanDraftPageVO, PlanDraftVO
@@ -81,23 +81,60 @@ class PlanDraftService:
     ):
         self.require_member(user)
         plan = await self.planner.create(user.id, project_id, goal, events=events)
-        plan = PlanResultVO.model_validate(plan.model_dump())
-        self.check_sources(plan, plan.proposal)
         async with self.sessions.begin() as session:
-            await self.lock_project(session, user, project_id)
-            hashes = await self.approvals.document_hashes(session, project_id, plan)
-            draft = PlanDraftDO(
-                project_id=project_id,
-                owner_id=user.id,
-                goal=goal,
-                plan={**plan.model_dump(mode="json"), "persisted": True},
-                document_hashes=hashes,
+            result = await self.save_validated_plan(
+                session, user.id, project_id, goal, plan
             )
-            session.add(draft)
-            await session.flush()
-            result = self.view(draft)
         # 只有事务成功提交，流式处理器才能发送已保存的最终结果。
         return result
+
+    async def save_validated_plan(
+        self,
+        session,
+        owner_id,
+        project_id,
+        goal,
+        plan,
+        *,
+        expected_document_hashes=None,
+    ):
+        """由调用者控制事务，使助手消息和生成草案一起提交或一起回滚。"""
+        plan = PlanResultVO.model_validate(plan.model_dump())
+        self.check_sources(plan, plan.proposal)
+        user = await session.get(UserDO, owner_id)
+        if user is None:
+            raise ApiError(403, "insufficient_permissions", "用户身份已失效")
+        self.require_member(user)
+        await self.lock_project(session, user, project_id)
+        hashes = await self.approvals.document_hashes(session, project_id, plan)
+        if expected_document_hashes is not None and hashes != expected_document_hashes:
+            raise ApiError(
+                409,
+                "draft_documents_changed",
+                "生成期间引用资料已变化，请重新生成草案",
+            )
+        existing = {
+            normalize_task_title(title)
+            for title in await session.scalars(
+                select(TaskDO.title).where(TaskDO.project_id == project_id)
+            )
+        }
+        if any(
+            normalize_task_title(task.title) in existing for task in plan.proposal.tasks
+        ):
+            raise ApiError(
+                409, "draft_task_conflict", "看板已有同名任务，请重新生成草案"
+            )
+        draft = PlanDraftDO(
+            project_id=project_id,
+            owner_id=owner_id,
+            goal=goal,
+            plan={**plan.model_dump(mode="json"), "persisted": True},
+            document_hashes=hashes,
+        )
+        session.add(draft)
+        await session.flush()
+        return self.view(draft)
 
     async def get(self, user, project_id, draft_id):
         async with self.sessions() as session:

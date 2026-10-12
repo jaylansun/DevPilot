@@ -15,9 +15,11 @@ from app.models.chat_do import (
 from app.schemas.chat_qo import ChatRequestQO
 from app.schemas.chat_session import SavedMessageVO, SessionDetailVO, SessionVO
 from app.schemas.chat_vo import ChatAnswerVO
+from app.services.chat_context_service import context_answer
 from app.services.chat_model_service import ChatThread
 from app.services.document_service import require_document_project
 from app.services.run_events import NOOP_EVENTS
+from app.services.run_limits import CHAT_LEASE_SECONDS, CHAT_SESSION_TIMEOUT_SECONDS
 
 logger = logging.getLogger(__name__)
 
@@ -31,8 +33,9 @@ def aware(value):
 
 
 class ChatSessionService:
-    def __init__(self, factory, chat):
+    def __init__(self, factory, chat, drafts=None):
         self.factory, self.chat = factory, chat
+        self.drafts = drafts
 
     async def require(self, db, owner, project, session_id, *, lock=False):
         await require_document_project(db, owner, project)
@@ -130,9 +133,11 @@ class ChatSessionService:
                     ChatMessageDO.client_message_id == body.client_message_id,
                 )
             )
-            if message and message.question != body.question:
+            if message and (
+                message.question != body.question or message.intent != body.intent
+            ):
                 raise ApiError(
-                    409, "message_id_conflict", "相同消息编号不能用于不同问题"
+                    409, "message_id_conflict", "相同消息编号不能用于不同问题或用途"
                 )
             if message and message.status == "completed":
                 return (
@@ -158,6 +163,7 @@ class ChatSessionService:
                     client_message_id=body.client_message_id,
                     seq=row.next_seq,
                     question=body.question,
+                    intent=body.intent,
                     created_at=now(),
                 )
                 db.add(message)
@@ -167,12 +173,26 @@ class ChatSessionService:
             message.status, message.error, message.attempt = "pending", None, uuid4()
             await db.flush()
             row.active_message_id = message.id
-            row.busy_until = now() + timedelta(seconds=120)
+            row.busy_until = now() + timedelta(seconds=CHAT_LEASE_SECONDS)
             row.updated_at = now()
             return message, row.checkpoint_id, None
 
     async def finish(self, owner, project, session_id, message, result, checkpoint_id):
         async with self.factory.begin() as db:
+            if result._artifact_readers:
+                # 先验证会话归属，随后按项目、资料、会话顺序加锁。
+                await self.require(db, owner, project, session_id)
+                try:
+                    for reader in result._artifact_readers:
+                        await reader.assert_unchanged_locked(db, owner, project)
+                except ApiError as exc:
+                    if exc.code == "planning_context_changed":
+                        raise ApiError(
+                            409,
+                            "chat_context_changed",
+                            "结果保存前项目资料或任务发生变化，请重新提问",
+                        ) from exc
+                    raise
             row = await self.require(db, owner, project, session_id, lock=True)
             current = await db.get(ChatMessageDO, message.id)
             if (
@@ -183,6 +203,24 @@ class ChatSessionService:
                 raise ApiError(
                     409, "chat_attempt_expired", "本次处理已失效，请刷新会话"
                 )
+            for artifact in result.artifacts:
+                if artifact.type != "task_plan":
+                    continue
+                if self.drafts is None:
+                    raise ApiError(
+                        503, "chat_storage_unavailable", "草案存储暂时不可用"
+                    )
+                draft = await self.drafts.save_validated_plan(
+                    db,
+                    owner,
+                    project,
+                    artifact.goal,
+                    artifact.result,
+                    expected_document_hashes=artifact._document_hashes,
+                )
+                artifact.draft_id = draft.id
+                artifact.draft_version = draft.version
+                artifact.result.persisted = True
             current.answer = result.model_dump(mode="json")
             current.status, current.error = "completed", None
             # 仅成功答案对应的检查点可供下一轮读取；失败的图状态不会串入历史。
@@ -218,7 +256,7 @@ class ChatSessionService:
         if replay:
             return replay
         try:
-            async with asyncio.timeout(105):
+            async with asyncio.timeout(CHAT_SESSION_TIMEOUT_SECONDS):
                 thread = ChatThread(f"chat:{session_id}", checkpoint_id)
                 recovery = []
                 if (
@@ -241,14 +279,18 @@ class ChatSessionService:
                             recovery.extend(
                                 [
                                     HumanMessage(content=old.question),
-                                    AIMessage(content=old.answer["answer"]),
+                                    AIMessage(
+                                        content=context_answer(
+                                            ChatAnswerVO.model_validate(old.answer)
+                                        )
+                                    ),
                                 ]
                             )
                     thread.checkpoint_id = None
                 result = await self.chat.answer(
                     owner,
                     project,
-                    ChatRequestQO(question=body.question),
+                    ChatRequestQO(question=body.question, intent=body.intent),
                     events=events,
                     streaming=streaming,
                     thread=thread,
@@ -262,7 +304,7 @@ class ChatSessionService:
                 await self.fail(
                     owner, session_id, message, isinstance(exc, asyncio.CancelledError)
                 )
-            except Exception as cleanup_error:
+            except Exception as cleanup_error:  # noqa: BLE001 -- 清理失败不能覆盖原始错误。
                 # 数据库暂时不可用时保留原始错误；租约到期后仍能恢复执行状态。
                 logger.warning(
                     "会话失败状态待恢复；异常类型=%s", type(cleanup_error).__name__

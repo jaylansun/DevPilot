@@ -1,11 +1,32 @@
 from typing import Annotated, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
-from app.schemas.plan_vo import ToolCallVO
+from app.schemas.plan_vo import PlanResultVO, ToolCallVO
 from app.schemas.rag_vo import RagSourceVO
-from app.schemas.workflow_vo import TaskEvidenceVO
+from app.schemas.workflow_vo import TaskEvidenceVO, WorkflowResultVO
+
+
+class ChatPlanArtifactVO(BaseModel):
+    """工件来源编号独立于聊天正文，草案只由会话提交事务保存。"""
+
+    type: Literal["task_plan"] = "task_plan"
+    goal: str = Field(min_length=1, max_length=2000)
+    result: PlanResultVO
+    draft_id: UUID | None = None
+    draft_version: int | None = Field(default=None, ge=1)
+    _document_hashes: dict = PrivateAttr(default_factory=dict)
+
+
+class ChatCheckArtifactVO(BaseModel):
+    type: Literal["requirement_check"] = "requirement_check"
+    result: WorkflowResultVO
+
+
+ChatArtifactVO = Annotated[
+    ChatPlanArtifactVO | ChatCheckArtifactVO, Field(discriminator="type")
+]
 
 
 class ChatInfoVO(BaseModel):
@@ -22,6 +43,8 @@ class ChatAnswerVO(BaseModel):
     tool_calls: list[ToolCallVO]
     status: Literal["answered", "insufficient_evidence", "demo"]
     mode: Literal["mock", "live"]
+    artifacts: list[ChatArtifactVO] = Field(default_factory=list, max_length=2)
+    _artifact_readers: list = PrivateAttr(default_factory=list)
 
 
 class ChatCompletion(BaseModel):

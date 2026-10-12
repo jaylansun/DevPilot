@@ -136,3 +136,54 @@ describe("NDJSON 客户端", () => {
     expect(cancel).toHaveBeenCalledOnce();
   });
 });
+
+describe("统一聊天工件与运行预算", () => {
+  const plan = contract.events.find(event => event.type === "final" && event.kind === "draft")!.result!.plan;
+  const check = {
+    mode: "live", intent: "requirement_check", status: "reviewed", answer: "已检查需求", persisted: false,
+    sources: [], tasks: [], tool_calls: [], report: { summary: "报告", insufficient_evidence: false, reviewed_source_ids: [], covered: [], missing: [], questions: [] },
+    scope: { ready_documents: [], tasks: [], limitation: "仅检查相关片段", document_search_performed: true, board_read: true },
+  };
+  const artifactAnswer = () => ({ mode: "live", basis: "project", status: "answered", answer: "草案和报告已保存", sources: [], tasks: [],
+    tool_calls: [{ name: "generate_task_plan", status: "success", item_count: 1 }, { name: "check_requirements", status: "success", item_count: 1 }],
+    artifacts: [{ type: "task_plan", goal: "完善项目", result: plan, draft_id: "saved-draft", draft_version: 2 }, { type: "requirement_check", result: check }],
+  });
+  it("同一聊天final接受保存草案和需求报告，不需要改变流kind", () => {
+    const event = { ...base, type: "final", kind: "chat", result: artifactAnswer() };
+    expect(parseStreamEvent(JSON.stringify(event))).toEqual(event);
+  });
+  it("旧聊天没有artifacts字段时仍可读取", () => {
+    const event = { ...base, type: "final", kind: "chat", result: { mode: "live", basis: "general", status: "answered", answer: "你好", sources: [], tasks: [], tool_calls: [] } };
+    expect(parseStreamEvent(JSON.stringify(event))).toEqual(event);
+  });
+  it.each([
+    { type: "unknown", result: plan },
+    { type: "task_plan", goal: "目标", result: plan, draft_id: "saved-draft", draft_version: 0 },
+    { type: "requirement_check", result: { ...check, report: { covered: [], missing: null, questions: [] } } },
+    { type: "task_plan", goal: "目标", result: { ...plan, proposal: { summary: "缺少任务字段", assumptions: [], risks: [], tasks: [{}] } }, draft_id: null, draft_version: null },
+  ])("损坏的工件不会传入结果侧栏：%j", artifact => {
+    const result = { ...artifactAnswer(), artifacts: [artifact] };
+    expect(() => parseStreamEvent(JSON.stringify({ ...base, type: "final", kind: "chat", result }))).toThrow();
+  });
+  it("统一聊天超过旧的120秒预算后仍能收到草案", async () => {
+    vi.useFakeTimers();
+    let writer!: ReadableStreamDefaultController;
+    const cancel = vi.fn();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(new ReadableStream({ start(controller) { writer = controller; }, cancel }), { headers: { "Content-Type": "application/x-ndjson" } })));
+    const answer = artifactAnswer();
+    const pending = expect(streamRequest("/test", "chat", {}, undefined, () => undefined)).resolves.toEqual(answer);
+    await vi.advanceTimersByTimeAsync(230_000);
+    expect(cancel).not.toHaveBeenCalled();
+    writer.enqueue(encode(line({ ...base, type: "final", kind: "chat", result: answer })));
+    await pending;
+  });
+  it("统一聊天仍受240秒总时限约束", async () => {
+    vi.useFakeTimers();
+    const cancel = vi.fn();
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response(new ReadableStream({ cancel }), { headers: { "Content-Type": "application/x-ndjson" } })));
+    const pending = expect(streamRequest("/test", "chat", {}, undefined, () => undefined)).rejects.toMatchObject({ code: "timeout" });
+    await vi.advanceTimersByTimeAsync(240_000);
+    await pending;
+    expect(cancel).toHaveBeenCalledOnce();
+  });
+});

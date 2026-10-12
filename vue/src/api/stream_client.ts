@@ -13,6 +13,37 @@ function validApproval(value: unknown): boolean {
     Array.isArray(value.plan.sources) && Array.isArray(value.created_tasks);
 }
 
+function validArtifact(value: unknown): boolean {
+  if (!object(value) || !object(value.result)) return false;
+  const result = value.result;
+  if (!["mock", "live"].includes(result.mode as string) || !Array.isArray(result.sources) || !Array.isArray(result.tool_calls) ||
+      !result.sources.every(source => object(source) && Number.isSafeInteger(source.source_id) && (source.source_id as number) > 0 &&
+        typeof source.document_id === "string" && typeof source.filename === "string" && typeof source.heading === "string" &&
+        typeof source.text === "string" && Number.isSafeInteger(source.chunk_index) && (source.chunk_index as number) >= 0)) return false;
+  if (value.type === "task_plan") {
+    return typeof value.goal === "string" && (value.draft_id == null || typeof value.draft_id === "string") &&
+      (value.draft_version == null || (Number.isSafeInteger(value.draft_version) && (value.draft_version as number) > 0)) &&
+      object(result.proposal) && typeof result.proposal.summary === "string" && Array.isArray(result.proposal.assumptions) &&
+      result.proposal.assumptions.every(item => typeof item === "string") && Array.isArray(result.proposal.risks) &&
+      result.proposal.risks.every(item => typeof item === "string") && Array.isArray(result.proposal.tasks) && result.proposal.tasks.every(task =>
+        object(task) && typeof task.draft_id === "string" && typeof task.title === "string" && typeof task.description === "string" &&
+        typeof task.acceptance_criteria === "string" && Number.isInteger(task.priority) && Array.isArray(task.dependencies) &&
+        task.dependencies.every(item => typeof item === "string") && Array.isArray(task.source_ids) && task.source_ids.every(id => Number.isSafeInteger(id) && (id as number) > 0));
+  }
+  if (value.type === "requirement_check") {
+    if (typeof result.answer !== "string" || !["knowledge_question", "task_lookup", "requirement_check", "clarify"].includes(result.intent as string) ||
+        !["reviewed", "answered", "insufficient_evidence", "demo", "clarification_needed"].includes(result.status as string) ||
+        !Array.isArray(result.tasks) || !object(result.scope) ||
+        !Array.isArray(result.scope.tasks) || !Array.isArray(result.scope.ready_documents) || typeof result.scope.limitation !== "string") return false;
+    return result.report === null || result.report === undefined || (object(result.report) &&
+      Array.isArray(result.report.covered) && Array.isArray(result.report.missing) && Array.isArray(result.report.questions) &&
+      result.report.covered.every(item => object(item) && typeof item.requirement === "string" && typeof item.explanation === "string" && Array.isArray(item.source_ids) && Array.isArray(item.task_ids)) &&
+      result.report.missing.every(item => object(item) && typeof item.requirement === "string" && typeof item.explanation === "string" && Array.isArray(item.source_ids)) &&
+      result.report.questions.every(item => object(item) && typeof item.question === "string" && typeof item.reason === "string" && Array.isArray(item.source_ids)));
+  }
+  return false;
+}
+
 export function parseStreamEvent(line: string): StreamEvent {
   let event: unknown;
   try { event = JSON.parse(line); } catch { throw invalid(); }
@@ -61,9 +92,11 @@ export function parseStreamEvent(line: string): StreamEvent {
               ["todo", "in_progress", "done"].includes(task.status as string) && Number.isInteger(task.priority) &&
               typeof task.description === "string" && typeof task.acceptance_criteria === "string" &&
               typeof task.description_truncated === "boolean" && typeof task.acceptance_criteria_truncated === "boolean") ||
-            !result.tool_calls.every(call => object(call) && ["search_documents", "read_task_board"].includes(call.name as string) &&
+            !result.tool_calls.every(call => object(call) && ["search_documents", "read_task_board", "generate_task_plan", "check_requirements"].includes(call.name as string) &&
               ["success", "empty"].includes(call.status as string) && Number.isSafeInteger(call.item_count) && (call.item_count as number) >= 0) ||
-            (result.basis === "general" && (result.sources.length > 0 || result.tasks.length > 0 || result.tool_calls.length > 0))) throw invalid();
+            (result.artifacts !== undefined && (!Array.isArray(result.artifacts) || !result.artifacts.every(validArtifact))) ||
+            (result.basis === "general" && (result.sources.length > 0 || result.tasks.length > 0 || result.tool_calls.length > 0 ||
+              (Array.isArray(result.artifacts) && result.artifacts.length > 0)))) throw invalid();
       } else if (event.kind === "knowledge") {
         if (typeof result.answer !== "string" || !["answered", "insufficient_evidence"].includes(result.status as string)) throw invalid();
       } else if (event.kind === "planning") {
@@ -131,8 +164,8 @@ export function streamRequest<K extends RunKind>(
 ) {
   return request<Results[K]>(path, {
     method: "POST", body, signal,
-    // 规划服务 120 秒，流式收尾 130 秒；浏览器留出传输时间，避免提前掐断。
-    timeoutMs: kind === "planning" || kind === "approval" || kind === "draft" ? 140_000 : kind === "chat" ? 120_000 : 75_000,
+    // 统一聊天可能串行查询、规划和检查，给服务端 230 秒预算留出传输时间。
+    timeoutMs: kind === "planning" || kind === "approval" || kind === "draft" ? 140_000 : kind === "chat" ? 240_000 : 75_000,
     accept: "application/x-ndjson",
     readResponse: (response, combinedSignal) => readNDJSON(response, kind, onEvent, combinedSignal),
   });

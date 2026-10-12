@@ -4,7 +4,7 @@ export const stepNames = [
   "answer_chat",
   "retrieve_knowledge", "answer_knowledge", "validate_result", "classify_intent",
   "load_lookup_board", "answer_lookup", "retrieve_documents", "load_task_board",
-  "generate_report", "clarify", "draft_proposal", "search_documents", "read_task_board", "submit_approval", "apply_approval",
+  "generate_report", "clarify", "draft_proposal", "search_documents", "read_task_board", "generate_task_plan", "check_requirements", "submit_approval", "apply_approval",
 ] as const;
 export type StepName = typeof stepNames[number];
 export type EventBase = { version: 1; seq: number; request_id: string };

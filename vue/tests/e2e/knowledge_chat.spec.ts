@@ -62,7 +62,7 @@ async function chat(page: Page) {
     if (/\/chat\/sessions\/[^/]+\/messages\/stream$/.test(path)) {
       state.calls++;
       const payload = req.postDataJSON();
-      expect(payload).toEqual({ question: expect.any(String), client_message_id: expect.any(String) });
+      expect(payload).toEqual({ question: expect.any(String), intent: "auto", client_message_id: expect.any(String) });
       expect(payload.question).toBeTruthy();
       state.questions.push(payload.question);
       state.clientIds.push(payload.client_message_id);
@@ -113,7 +113,7 @@ async function chat(page: Page) {
 test("单轮问答显示来源，原文仅作文本渲染，手机布局正常", async ({ page }) => {
   await chat(page);
   await expect(
-    page.getByRole("link", { name: "AI 问答", exact: true }),
+    page.getByRole("link", { name: "项目助手", exact: true }),
   ).toHaveAttribute("aria-current", "page");
   await expect(page.getByRole("status")).toContainText("演示模式");
   await page.getByLabel("你想了解什么？").fill("下单要填写什么？");
@@ -159,7 +159,7 @@ test("没有资料也能闲聊，未配置模型时禁用发送", async ({ page 
   await page.getByLabel("你想了解什么？").fill("你好");
   await page.getByRole("button", { name: "发送问题", exact: true }).click();
   await expect(page.getByText("你好！有什么想聊的？", { exact: true })).toBeVisible();
-  await expect(page.getByText("自由交流", { exact: true })).toBeVisible();
+  await expect(page.getByText("未查询项目资料", { exact: true })).toBeVisible();
   await expect(page.getByLabel("回答来源")).toHaveCount(0);
   state.ready = 1;
   state.mode = "live";
@@ -173,7 +173,7 @@ test("没有资料也能闲聊，未配置模型时禁用发送", async ({ page 
   await expect(page.getByLabel("你想了解什么？")).toBeEnabled();
 });
 
-test("消息只传问题和幂等编号，重试不重复，新会话隔离且刷新恢复", async ({ page }) => {
+test("消息传问题、用途和幂等编号，重试不重复，新会话隔离且刷新恢复", async ({ page }) => {
   const state = await chat(page);
   state.general = true;
   const input = page.getByLabel("你想了解什么？");

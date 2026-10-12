@@ -14,25 +14,43 @@ from pydantic import ValidationError
 from app.errors import ApiError
 from app.repositories.rag_repository import list_ready_documents
 from app.schemas.chat_qo import ChatRequestQO
-from app.schemas.chat_vo import ChatAnswerVO, ChatCompletion, ChatInfoVO
+from app.schemas.chat_vo import (
+    ChatAnswerVO,
+    ChatCheckArtifactVO,
+    ChatCompletion,
+    ChatInfoVO,
+)
+from app.services.chat_business_service import run_requirement_check, run_task_planning
+from app.services.chat_context_service import context_answer
 from app.services.chat_model_service import ChatThread, invalid_chat
 from app.services.document_service import require_document_project
 from app.services.planning_read_service import PlanningReadService
 from app.services.run_events import NOOP_EVENTS, EventPublisher, trace
+from app.services.run_limits import CHAT_TIMEOUT_SECONDS
 from app.tools.chat_tools import ChatToolContext
 
 logger = logging.getLogger(__name__)
-CHAT_TIMEOUT_SECONDS = 100
 
 
 class ChatService:
     """一次请求独占消息和读取器；模型按需选工具，身份与执行权限由服务端控制。"""
 
-    def __init__(self, settings, index_service, session_factory, model_service):
+    def __init__(
+        self,
+        settings,
+        index_service,
+        session_factory,
+        model_service,
+        *,
+        planner=None,
+        workflow=None,
+    ):
         self.settings = settings
         self.index_service = index_service
         self.session_factory = session_factory
         self.model_service = model_service
+        self.planner = planner
+        self.workflow = workflow
         self._slots = asyncio.Semaphore(1)
 
     @property
@@ -100,23 +118,53 @@ class ChatService:
                 ]
                 messages.append(HumanMessage(content=body.question))
                 context = ChatToolContext(
-                    owner_id, project_id, reader, board_reader, events
+                    owner_id,
+                    project_id,
+                    reader,
+                    board_reader,
+                    events,
+                    planner=self.planner,
+                    workflow=self.workflow,
                 )
-                completion = await self.model_service.run(
-                    messages, context, thread=thread, streaming=streaming
-                )
+                if body.intent == "task_planning":
+                    data = await run_task_planning(context, body.question)
+                    completion = (
+                        data["summary"]
+                        + "\n\n已生成任务草案，请展开结果查看任务、假设和风险。"
+                    )
+                elif body.intent == "requirement_check":
+                    data = await run_requirement_check(context, body.question)
+                    completion = (
+                        data["summary"]
+                        + "\n\n请展开检查结果查看覆盖、缺口、待确认事项和本次检查范围。"
+                    )
+                else:
+                    completion = await self.model_service.run(
+                        messages, context, thread=thread, streaming=streaming
+                    )
                 async with trace(events, "validate_result"):
-                    result = self._finish(completion, reader, context.board)
+                    result = self._finish(
+                        completion, reader, context.board, context.artifacts
+                    )
                     if reader.tool_calls:
                         await reader.assert_unchanged(owner_id, project_id)
                         if context.board is not None:
                             await board_reader.assert_unchanged(owner_id, project_id)
                     else:
                         await self.authorize(owner_id, project_id)
+                    for artifact_reader in context.artifact_readers:
+                        await artifact_reader.assert_unchanged(owner_id, project_id)
+                    result._artifact_readers = context.artifact_readers
                 if self.settings.ai_mode == "mock":
                     result.mode = "mock"
                     if result.status == "answered":
                         result.status = "demo"
+                if body.intent != "auto":
+                    if streaming:
+                        await events.emit("token", text=result.answer)
+                    await self.model_service.record(
+                        messages, context_answer(result), thread=thread
+                    )
                 return result
         except ApiError as exc:
             if exc.code == "planning_context_changed":
@@ -154,7 +202,12 @@ class ChatService:
         finally:
             self._slots.release()
 
-    def _finish(self, result: ChatCompletion, reader, board) -> ChatAnswerVO:
+    def _finish(
+        self, result: ChatCompletion | str, reader, board, artifacts=None
+    ) -> ChatAnswerVO:
+        artifacts = artifacts or []
+        if isinstance(result, str):
+            return self._finish_text(result, reader, board, artifacts)
         available = {source.source_id: source for source in reader.sources}
         selected = result.source_ids
         inline = {int(value) for value in re.findall(r"\[(\d+)\]", result.answer)}
@@ -176,7 +229,10 @@ class ChatService:
             ):
                 raise invalid_chat()
         elif not reader.tool_calls or (
-            not result.insufficient_evidence and not selected and board is None
+            not result.insufficient_evidence
+            and not selected
+            and board is None
+            and not artifacts
         ):
             raise invalid_chat()
         return ChatAnswerVO(
@@ -186,7 +242,51 @@ class ChatService:
             tasks=[tasks[value] for value in result.task_ids],
             tool_calls=reader.tool_calls,
             status="insufficient_evidence"
-            if result.insufficient_evidence
+            if result.insufficient_evidence or self._artifact_insufficient(artifacts)
             else "answered",
             mode=self.settings.ai_mode,
+            artifacts=artifacts,
+        )
+
+    @staticmethod
+    def _artifact_insufficient(artifacts):
+        return any(
+            isinstance(artifact, ChatCheckArtifactVO)
+            and artifact.result.status == "insufficient_evidence"
+            for artifact in artifacts
+        )
+
+    def _finish_text(self, answer: str, reader, board, artifacts=None) -> ChatAnswerVO:
+        artifacts = artifacts or []
+        if not answer.strip() or len(answer) > 4000:
+            raise invalid_chat()
+        # 引用只解释为正文中的编号；代码示例、数组下标和 Markdown 链接不是资料引用。
+        prose = re.sub(r"```.*?```|~~~.*?~~~|`[^`\n]*`", "", answer, flags=re.DOTALL)
+        selected = list(
+            dict.fromkeys(
+                int(value)
+                for value in re.findall(r"(?<![A-Za-z0-9_])\[(\d+)\](?!\()", prose)
+            )
+        )
+        available = {source.source_id: source for source in reader.sources}
+        if not set(selected) <= available.keys():
+            raise invalid_chat()
+        if available and not selected and board is None:
+            # 不把遗漏引用的项目回答当作已验证的成功答案。
+            raise invalid_chat()
+        project_read = bool(reader.tool_calls)
+        insufficient = (
+            project_read and not available and board is None and not artifacts
+        ) or self._artifact_insufficient(artifacts)
+        return ChatAnswerVO(
+            answer=answer,
+            # 表示本轮实际使用的上下文，不作为问题分类或事实正确性的保证。
+            basis="project" if project_read else "general",
+            sources=[available[value] for value in selected],
+            # 展示真实查询记录，不能从自然语言猜测模型选择了哪些任务。
+            tasks=board["tasks"] if board is not None else [],
+            tool_calls=reader.tool_calls,
+            status="insufficient_evidence" if insufficient else "answered",
+            mode=self.settings.ai_mode,
+            artifacts=artifacts,
         )

@@ -88,7 +88,12 @@ class PlanProposalVO(BaseModel):
 
 
 class ToolCallVO(BaseModel):
-    name: Literal["search_documents", "read_task_board"]
+    name: Literal[
+        "search_documents",
+        "read_task_board",
+        "generate_task_plan",
+        "check_requirements",
+    ]
     status: Literal["success", "empty"]
     item_count: int = Field(ge=0)
 

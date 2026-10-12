@@ -4,6 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+from app.schemas.chat_qo import ChatIntent
 from app.schemas.chat_vo import ChatAnswerVO
 
 
@@ -14,6 +15,7 @@ class StrictInput(BaseModel):
 class SessionMessageQO(StrictInput):
     question: str = Field(min_length=1, max_length=2000)
     client_message_id: UUID
+    intent: ChatIntent = "auto"
 
 
 class SessionVO(BaseModel):
@@ -30,6 +32,7 @@ class SavedMessageVO(BaseModel):
     client_message_id: UUID
     seq: int
     question: str
+    intent: ChatIntent = "auto"
     answer: ChatAnswerVO | None
     status: Literal["pending", "completed", "failed", "cancelled"]
     error: str | None

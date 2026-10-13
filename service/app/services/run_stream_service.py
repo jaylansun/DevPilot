@@ -6,6 +6,7 @@ from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import suppress
 from typing import Literal
 
+from anyio import CancelScope
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel
 
@@ -101,8 +102,10 @@ class StreamRunner:
         finally:
             # StreamingResponse 断连时关闭生成器，取消传播到模型和 Graph。
             task.cancel()
-            with suppress(asyncio.CancelledError):
-                await task
+            # 已取消的 ASGI scope 会重复取消 await，需等待生产任务完成其有限状态清理。
+            with CancelScope(shield=True):
+                with suppress(asyncio.CancelledError):
+                    await task
 
 
 class NDJSONResponse(StreamingResponse):

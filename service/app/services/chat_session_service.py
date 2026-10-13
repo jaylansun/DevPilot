@@ -3,6 +3,7 @@ import logging
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
+from anyio import CancelScope
 from langchain_core.messages import AIMessage, HumanMessage
 from openai import APITimeoutError
 from sqlalchemy import delete, select
@@ -22,6 +23,7 @@ from app.services.run_events import NOOP_EVENTS
 from app.services.run_limits import CHAT_LEASE_SECONDS, CHAT_SESSION_TIMEOUT_SECONDS
 
 logger = logging.getLogger(__name__)
+STATE_UPDATE_TIMEOUT_SECONDS = 5
 
 
 def now():
@@ -250,12 +252,16 @@ class ChatSessionService:
     async def answer(
         self, owner, project, session_id, body, *, events=NOOP_EVENTS, streaming=False
     ):
-        message, checkpoint_id, replay = await self.start(
-            owner, project, session_id, body
-        )
-        if replay:
-            return replay
+        message = None
         try:
+            # 断连会在每次 await 继续取消；短事务完成后才能可靠地清理已提交的占用。
+            with CancelScope(shield=True):
+                async with asyncio.timeout(STATE_UPDATE_TIMEOUT_SECONDS):
+                    message, checkpoint_id, replay = await self.start(
+                        owner, project, session_id, body
+                    )
+            if replay:
+                return replay
             async with asyncio.timeout(CHAT_SESSION_TIMEOUT_SECONDS):
                 thread = ChatThread(f"chat:{session_id}", checkpoint_id)
                 recovery = []
@@ -300,15 +306,22 @@ class ChatSessionService:
                     owner, project, session_id, message, result, thread.checkpoint_id
                 )
         except BaseException as exc:
-            try:
-                await self.fail(
-                    owner, session_id, message, isinstance(exc, asyncio.CancelledError)
-                )
-            except Exception as cleanup_error:  # noqa: BLE001 -- 清理失败不能覆盖原始错误。
-                # 数据库暂时不可用时保留原始错误；租约到期后仍能恢复执行状态。
-                logger.warning(
-                    "会话失败状态待恢复；异常类型=%s", type(cleanup_error).__name__
-                )
+            if message is not None:
+                try:
+                    # 只保护状态收尾，模型调用仍立即取消；独立时限避免清理无限等待。
+                    with CancelScope(shield=True):
+                        async with asyncio.timeout(STATE_UPDATE_TIMEOUT_SECONDS):
+                            await self.fail(
+                                owner,
+                                session_id,
+                                message,
+                                isinstance(exc, asyncio.CancelledError),
+                            )
+                except Exception as cleanup_error:  # noqa: BLE001 -- 保留原始错误。
+                    # 数据库暂时不可用时保留原始错误；租约到期后仍能恢复执行状态。
+                    logger.warning(
+                        "会话失败状态待恢复；异常类型=%s", type(cleanup_error).__name__
+                    )
             if isinstance(exc, (TimeoutError, APITimeoutError)):
                 raise ApiError(
                     504, "chat_context_timeout", "会话处理超时，请重试"

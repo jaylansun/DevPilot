@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from time import monotonic
 from uuid import UUID
 
 from langchain.agents.middleware.model_call_limit import ModelCallLimitExceededError
@@ -125,8 +126,11 @@ class PlanService:
             raise ApiError(
                 503, "planning_busy", "当前正在生成其他方案，请稍后再试"
             ) from exc
+        started = monotonic()
+        deadline = asyncio.timeout(PLANNING_TIMEOUT_SECONDS)
+        context = None
         try:
-            async with asyncio.timeout(PLANNING_TIMEOUT_SECONDS):
+            async with deadline:
                 # 工具上下文只在本次请求内存在，身份不交给模型填写。
                 reader = PlanningReadService(
                     self.session_factory,
@@ -136,6 +140,7 @@ class PlanService:
                 context = PlanToolContext(owner_id, project_id, reader, events=events)
                 async with trace(events, "draft_proposal"):
                     proposal = await self.agent_service.generate(goal, context)
+                context.diagnostics["stage"] = "validate_result"
                 async with trace(events, "validate_result"):
                     proposal = PlanProposalVO.model_validate(proposal.model_dump())
                     validate_proposal_sources(proposal, reader)
@@ -150,9 +155,35 @@ class PlanService:
         except ApiError:
             raise
         except (TimeoutError, APITimeoutError) as exc:
-            raise ApiError(
-                504, "planning_timeout", "任务规划超时，请缩小目标范围后重试"
-            ) from exc
+            timeout_kind = (
+                "model_io"
+                if isinstance(exc, APITimeoutError)
+                else "business_deadline"
+                if deadline.expired()
+                else "operation"
+            )
+            diagnostics = context.diagnostics if context is not None else {}
+            details = {
+                "timeout_kind": timeout_kind,
+                "stage": diagnostics.get("stage", "prepare_context"),
+                "model_calls": diagnostics.get("model_calls", 0),
+                "model_elapsed_seconds": round(
+                    diagnostics.get("model_elapsed", 0.0), 2
+                ),
+                "elapsed_seconds": round(monotonic() - started, 2),
+            }
+            # 只记录明确列出的诊断字段；不记录异常正文或模型输入输出。
+            logger.warning(
+                "任务规划超时；请求编号=%s；诊断=%s",
+                getattr(events, "request_id", None),
+                details,
+            )
+            message = {
+                "model_io": "任务规划的模型响应超时，请稍后重试",
+                "business_deadline": "任务规划处理超时，请重试或缩小目标范围",
+                "operation": "任务规划处理超时，请稍后重试",
+            }[timeout_kind]
+            raise ApiError(504, "planning_timeout", message, details=details) from exc
         except (
             ModelCallLimitExceededError,
             ToolCallLimitExceededError,

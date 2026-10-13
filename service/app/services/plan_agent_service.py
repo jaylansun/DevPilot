@@ -1,5 +1,6 @@
 import json
 from collections import Counter
+from time import monotonic
 
 from httpx import TransportError
 from langchain.agents import create_agent
@@ -29,8 +30,9 @@ MAX_MODEL_CALLS = MAX_DOCUMENT_SEARCHES + 2
 # 只给结构化校验失败额外一次纠正；读取预算和总时限保持不变。
 MAX_MODEL_CALLS_WITH_REPAIR = MAX_MODEL_CALLS + 1
 MAX_TOOL_CALLS = 6
-# 图步数还包含调用计数等中间件节点，不能与模型调用次数等同。
-PLAN_RECURSION_LIMIT = 32
+# 图步数还包含各工具的计数节点，为五轮调用和一次纠正保留收尾空间。
+# 模型调用与工具预算仍由上面的独立限制保证。
+PLAN_RECURSION_LIMIT = 48
 
 PLAN_RULES = """你是项目任务规划助手，只提出草案，不执行任务、不审批、不写入数据库。
 工具限定了当前项目；不得索取、更改或猜测用户/项目身份，不得调用工具以外的程序或外部网址。
@@ -55,8 +57,8 @@ PLAN_PROMPT = (
     PLAN_RULES
     + """
 先调用 search_documents 检索当前项目相关资料，并调用 read_task_board 读取现有任务，再生成方案。
-先完成这两个必要读取，再判断是否补充检索；文档检索最多三次，看板无需重复读取。
-已有足够依据时立即提交 PlanProposalVO，不必用完检索次数；只能使用当前提供的工具。
+先完成这两个必要读取；检索已有相关片段时直接生成本阶段草案，未知内容列为假设或风险。
+仅在检索为空时补充不同查询，文档检索最多三次，看板无需重复读取；只能使用当前提供的工具。
 """
 )
 
@@ -73,6 +75,39 @@ FINAL_PLAN_PROMPT = (
 
 class PlanningProgressMiddleware(AgentMiddleware):
     """按已完成的读取收窄工具，避免用完模型轮次后才准备提交草案。"""
+
+    @staticmethod
+    def has_document_evidence(messages):
+        for message in messages:
+            if (
+                not isinstance(message, ToolMessage)
+                or message.name != "search_documents"
+                or message.status != "success"
+                or not isinstance(message.content, str)
+            ):
+                continue
+            try:
+                result = json.loads(message.content)
+            except (ValueError, TypeError):
+                continue
+            if (
+                isinstance(result, dict)
+                and isinstance(result.get("sources"), list)
+                and result["sources"]
+            ):
+                return True
+        return False
+
+    @staticmethod
+    async def model_call(request, handler, stage):
+        diagnostics = request.runtime.context.diagnostics
+        diagnostics["stage"] = stage
+        diagnostics["model_calls"] += 1
+        started = monotonic()
+        try:
+            return await handler(request)
+        finally:
+            diagnostics["model_elapsed"] += monotonic() - started
 
     async def awrap_model_call(self, request: ModelRequest, handler):
         # ToolStrategy 校验失败会附加同名工具反馈；成功输出后图已结束，不再进入此处。
@@ -104,16 +139,19 @@ class PlanningProgressMiddleware(AgentMiddleware):
         }
         if missing and not repairing:
             # 必要读取结束前不提供结果工具，已经读取过的工具也不再占用这一阶段。
-            return await handler(
+            return await self.model_call(
                 request.override(
                     tools=[tool for tool in request.tools if tool.name in missing],
                     response_format=None,
                     tool_choice="required",
-                )
+                ),
+                handler,
+                "read_required",
             )
 
         can_search = (
-            completed["search_documents"] < MAX_DOCUMENT_SEARCHES
+            not self.has_document_evidence(request.messages)
+            and completed["search_documents"] < MAX_DOCUMENT_SEARCHES
             and sum(completed.values()) < MAX_TOOL_CALLS - 1
             and request.state.get("run_model_call_count", 0) < MAX_MODEL_CALLS - 1
         )
@@ -132,7 +170,7 @@ class PlanningProgressMiddleware(AgentMiddleware):
                     for call in message.tool_calls
                     if call["name"] == "PlanProposalVO"
                 )
-            response = await handler(
+            response = await self.model_call(
                 request.override(
                     tools=[],
                     # 纠正轮校验再失败就终止，不无限重试，也不重新读取资料。
@@ -144,7 +182,9 @@ class PlanningProgressMiddleware(AgentMiddleware):
                     messages=[
                         HumanMessage(content=json.dumps(evidence, ensure_ascii=False))
                     ],
-                )
+                ),
+                handler,
+                "plan_repair" if repairing else "plan_generation",
             )
             if any(
                 call["name"] != "PlanProposalVO"
@@ -154,13 +194,15 @@ class PlanningProgressMiddleware(AgentMiddleware):
             ):
                 raise ApiError(502, "invalid_plan", "模型未按要求提交任务草案，请重试")
             return response
-        # 资料足够时可直接提交，否则只允许补充检索；ToolStrategy 会添加结果工具。
-        return await handler(
+        # 空结果允许换查询补充检索；已有资料时在上面的终稿阶段结束读取。
+        return await self.model_call(
             request.override(
                 tools=[
                     tool for tool in request.tools if tool.name == "search_documents"
                 ]
-            )
+            ),
+            handler,
+            "read_more",
         )
 
 
@@ -180,6 +222,11 @@ def build_planning_agent(model):
         middleware=[
             ModelCallLimitMiddleware(
                 run_limit=MAX_MODEL_CALLS_WITH_REPAIR, exit_behavior="error"
+            ),
+            ToolCallLimitMiddleware(
+                tool_name="search_documents",
+                run_limit=MAX_DOCUMENT_SEARCHES,
+                exit_behavior="error",
             ),
             # 六次总额度包含结构化输出；成功返回方案需为最后一次输出预留额度。
             ToolCallLimitMiddleware(run_limit=MAX_TOOL_CALLS, exit_behavior="error"),

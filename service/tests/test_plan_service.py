@@ -1,8 +1,18 @@
 import asyncio
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
+import httpx
 import pytest
+from langchain.agents.middleware.model_call_limit import ModelCallLimitExceededError
+from langchain.agents.middleware.tool_call_limit import ToolCallLimitExceededError
+from langgraph.errors import GraphRecursionError
+from openai import APITimeoutError
+from sqlalchemy import func, select
+from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+from test_plan_schema import proposal_data
+
 from app.config import Settings
 from app.database import Base
 from app.errors import ApiError
@@ -14,12 +24,6 @@ from app.schemas.plan_vo import PlanProposalVO
 from app.services.document_index_service import RetrievedChunk
 from app.services.plan_agent_service import PlanAgentService, build_planning_model
 from app.services.plan_service import PlanService
-from langchain.agents.middleware.model_call_limit import ModelCallLimitExceededError
-from langchain.agents.middleware.tool_call_limit import ToolCallLimitExceededError
-from langgraph.errors import GraphRecursionError
-from sqlalchemy import func, select
-from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
-from test_plan_schema import proposal_data
 
 
 def settings(**kwargs):
@@ -270,6 +274,75 @@ async def test_safe_errors_and_slot_release(planning_context, exception, code, c
         assert type(exception).__name__ in caplog.text
         assert "限定步骤" in error.value.message
     assert service._slots._value == 1
+
+
+@pytest.mark.parametrize("timeout_kind", ["model_io", "business_deadline", "operation"])
+async def test_timeout_reports_its_actual_source_and_allows_retry(
+    planning_context, monkeypatch, timeout_kind, caplog
+):
+    factory, owner, project, _doc, index = planning_context
+    if timeout_kind == "business_deadline":
+        monkeypatch.setattr("app.services.plan_service.PLANNING_TIMEOUT_SECONDS", 0.02)
+    contexts = []
+
+    async def generate(goal, context):
+        contexts.append(context)
+        context.diagnostics.update(
+            stage="plan_generation",
+            model_calls=2,
+            model_elapsed=19.234,
+            private_extra="private-diagnostic-must-not-leak",
+        )
+        if timeout_kind == "model_io":
+            raise APITimeoutError(
+                request=httpx.Request(
+                    "POST", "https://fixture.invalid/private-credential-never-log"
+                )
+            )
+        if timeout_kind == "operation":
+            raise TimeoutError("private-operation-error-never-log")
+        await asyncio.Event().wait()
+
+    agent = AsyncMock()
+    agent.generate.side_effect = generate
+    service = PlanService(settings(), index, factory, agent)
+    events = SimpleNamespace(request_id="planning-timeout-check", emit=AsyncMock())
+    with pytest.raises(ApiError) as error:
+        await service.create(
+            owner, project, "private-user-goal-never-log", events=events
+        )
+    failure = error.value
+    assert failure.code == "planning_timeout" and failure.status_code == 504
+    assert failure.details["timeout_kind"] == timeout_kind
+    assert failure.details["stage"] == "plan_generation"
+    assert failure.details["model_calls"] == 2
+    assert failure.details["model_elapsed_seconds"] == 19.23
+    assert failure.details["elapsed_seconds"] >= 0
+    assert "planning-timeout-check" in caplog.text
+    assert timeout_kind in caplog.text and "plan_generation" in caplog.text
+    serialized = str(failure.details) + failure.message + caplog.text
+    assert "private-" not in serialized
+    if timeout_kind == "model_io":
+        assert "模型响应超时" in failure.message
+        assert "缩小" not in failure.message
+    assert service._slots._value == 1
+
+    # 新请求有独立诊断上下文，且失败释放并发额度后能够正常生成。
+    monkeypatch.setattr("app.services.plan_service.PLANNING_TIMEOUT_SECONDS", 120)
+    mock_agent = PlanAgentService(settings())
+
+    async def retry(goal, context):
+        assert context is not contexts[0]
+        assert context.diagnostics == {
+            "stage": "prepare_context",
+            "model_calls": 0,
+            "model_elapsed": 0.0,
+        }
+        return await mock_agent.generate(goal, context)
+
+    agent.generate.side_effect = retry
+    result = await service.create(owner, project, "完善下单流程")
+    assert result.proposal.tasks and not result.persisted
 
 
 async def test_cancel_and_busy_are_bounded(planning_context):

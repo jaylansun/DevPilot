@@ -6,6 +6,7 @@ from datetime import timedelta
 from unittest.mock import AsyncMock
 from uuid import uuid4
 
+import anyio
 import httpx
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage
@@ -243,6 +244,140 @@ async def test_cancel_busy_expiry_and_outdated_retry(planning_context):
     with pytest.raises(ApiError) as error:
         await sessions.answer(owner, project, sid, abandoned)
     assert error.value.code == "chat_retry_outdated"
+
+
+async def test_asgi_disconnect_clears_pending_and_allows_immediate_retry(
+    planning_context, api_app_factory
+):
+    factory, owner, project, *_ = planning_context
+    sessions, sid = await setup(planning_context)
+    request = body()
+    started, cancelled = asyncio.Event(), asyncio.Event()
+
+    async def wait_model(*args, **kwargs):
+        started.set()
+        try:
+            await asyncio.Event().wait()
+        finally:
+            cancelled.set()
+
+    sessions.chat.model_service.turn.side_effect = wait_model
+    app = api_app_factory(UserDO(id=owner, username="test", role=UserRole.MEMBER))
+    app.dependency_overrides[get_chat_sessions] = lambda: sessions
+    sent_body = False
+
+    async def receive():
+        nonlocal sent_body
+        if not sent_body:
+            sent_body = True
+            return {
+                "type": "http.request",
+                "body": request.model_dump_json().encode(),
+                "more_body": False,
+            }
+        await started.wait()
+        return {"type": "http.disconnect"}
+
+    async def send(message):
+        pass
+
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0", "spec_version": "2.3"},
+        "http_version": "1.1",
+        "method": "POST",
+        "scheme": "http",
+        "root_path": "",
+        "path": f"/api/v1/projects/{project}/chat/sessions/{sid}/messages/stream",
+        "query_string": b"",
+        "headers": [(b"content-type", b"application/json")],
+        "client": ("127.0.0.1", 12345),
+        "server": ("test", 80),
+    }
+    await asyncio.wait_for(app(scope, receive, send), 3)
+    assert started.is_set() and cancelled.is_set()
+    async with factory() as db:
+        row = await db.get(ChatSessionDO, sid)
+        message = await db.scalar(
+            select(ChatMessageDO).where(ChatMessageDO.session_id == sid)
+        )
+        assert message.status == "cancelled"
+        assert row.active_message_id is None and row.busy_until is None
+    assert sessions.chat._slots._value == 1
+    sessions.chat.model_service.turn.side_effect = [finish("重试成功")]
+    assert (await sessions.answer(owner, project, sid, request)).answer == "重试成功"
+    assert len((await sessions.get(owner, project, sid)).messages) == 1
+
+
+async def test_disconnect_after_start_commit_clears_session(planning_context):
+    factory, owner, project, *_ = planning_context
+    sessions, sid = await setup(planning_context)
+    request = body()
+    committed, release = asyncio.Event(), asyncio.Event()
+    original_start = sessions.start
+
+    async def start(*args):
+        result = await original_start(*args)
+        committed.set()
+        await release.wait()
+        return result
+
+    sessions.start = start
+
+    async def answer():
+        await sessions.answer(owner, project, sid, request)
+
+    async with anyio.create_task_group() as tasks:
+        tasks.start_soon(answer)
+        await asyncio.wait_for(committed.wait(), 3)
+        tasks.cancel_scope.cancel()
+        release.set()
+    async with factory() as db:
+        row = await db.get(ChatSessionDO, sid)
+        message = await db.scalar(
+            select(ChatMessageDO).where(ChatMessageDO.session_id == sid)
+        )
+        assert message.status == "cancelled"
+        assert row.active_message_id is None and row.busy_until is None
+    sessions.chat.model_service.turn.assert_not_awaited()
+    sessions.start = original_start
+    assert (await sessions.answer(owner, project, sid, request)).answer == "你好！"
+
+
+async def test_cancel_cleanup_timeout_leaves_lease_recovery_available(
+    planning_context, monkeypatch, caplog
+):
+    factory, owner, project, *_ = planning_context
+    sessions, sid = await setup(planning_context)
+    started = asyncio.Event()
+
+    async def wait_model(*args, **kwargs):
+        started.set()
+        await asyncio.Event().wait()
+
+    async def blocked_cleanup(*args):
+        await asyncio.Event().wait()
+
+    sessions.chat.model_service.turn.side_effect = wait_model
+    sessions.fail = blocked_cleanup
+    monkeypatch.setattr(
+        "app.services.chat_session_service.STATE_UPDATE_TIMEOUT_SECONDS", 0.1
+    )
+
+    async def answer():
+        await sessions.answer(owner, project, sid, body())
+
+    async with asyncio.timeout(3):
+        async with anyio.create_task_group() as tasks:
+            tasks.start_soon(answer)
+            await started.wait()
+            tasks.cancel_scope.cancel()
+    assert "会话失败状态待恢复；异常类型=TimeoutError" in caplog.text
+    assert sessions.chat._slots._value == 1
+    async with factory.begin() as db:
+        row = await db.get(ChatSessionDO, sid)
+        row.busy_until = now() - timedelta(seconds=1)
+    assert (await sessions.get(owner, project, sid)).messages[0].status == "failed"
 
 
 async def test_delete_removes_checkpoints_and_missing_checkpoint_recovers(

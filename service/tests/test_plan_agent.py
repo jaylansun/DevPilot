@@ -2,13 +2,6 @@ from unittest.mock import AsyncMock, Mock
 from uuid import uuid4
 
 import pytest
-from app.errors import ApiError
-from app.services.plan_agent_service import (
-    MAX_MODEL_CALLS,
-    PLAN_RECURSION_LIMIT,
-    build_planning_agent,
-)
-from app.tools.planning_tools import PlanToolContext
 from langchain.agents.middleware.model_call_limit import ModelCallLimitExceededError
 from langchain.agents.middleware.tool_call_limit import ToolCallLimitExceededError
 from langchain_core.language_models.chat_models import BaseChatModel
@@ -17,6 +10,14 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.utils.function_calling import convert_to_openai_tool
 from pydantic import Field
 from test_plan_schema import proposal_data
+
+from app.errors import ApiError
+from app.services.plan_agent_service import (
+    MAX_MODEL_CALLS,
+    PLAN_RECURSION_LIMIT,
+    build_planning_agent,
+)
+from app.tools.planning_tools import PlanToolContext
 
 
 class ScriptedPlanningModel(BaseChatModel):
@@ -84,11 +85,16 @@ def final_reply(data=None):
     )
 
 
-def tool_context():
+def tool_context(*, empty_searches=0):
     reader = Mock()
     reader.search_documents = AsyncMock(
         return_value={"sources": [{"source_id": 1, "text": "库存不足不允许下单"}]}
     )
+    if empty_searches:
+        reader.search_documents.side_effect = [
+            *[{"sources": []} for _ in range(empty_searches)],
+            {"sources": [{"source_id": 1, "text": "库存不足不允许下单"}]},
+        ]
     reader.read_task_board = AsyncMock(return_value={"tasks": [], "total": 0})
     return PlanToolContext(uuid4(), uuid4(), reader)
 
@@ -124,7 +130,7 @@ class SearchFirstPlanningModel(ScriptedPlanningModel):
 
 async def test_serial_reads_reserve_final_model_call_and_stop_searching():
     """复现 MiMo 单工具逐轮读取：三次检索加看板后仍须有一次输出机会。"""
-    context = tool_context()
+    context = tool_context(empty_searches=2)
     model = SearchFirstPlanningModel(replies=[])
     result = await build_planning_agent(model).ainvoke(
         {"messages": [{"role": "user", "content": "规划下一阶段的开发任务"}]},
@@ -150,11 +156,30 @@ async def test_serial_reads_reserve_final_model_call_and_stop_searching():
     assert "read_task_board" in final_context and "total" in final_context
 
 
+async def test_evidence_stops_retrieval_even_for_search_first_model():
+    context = tool_context()
+    model = SearchFirstPlanningModel(replies=[])
+    result = await build_planning_agent(model).ainvoke(
+        {"messages": [{"role": "user", "content": "规划订单模块"}]},
+        context=context,
+        config={"recursion_limit": PLAN_RECURSION_LIMIT},
+    )
+    assert result["structured_response"].model_dump() == proposal_data()
+    assert model.bound_history == [
+        ["search_documents", "read_task_board"],
+        ["read_task_board"],
+        ["PlanProposalVO"],
+    ]
+    context.reader.search_documents.assert_awaited_once()
+    context.reader.read_task_board.assert_awaited_once()
+    assert model.calls == 3
+
+
 async def test_shared_agent_does_not_carry_read_budget_between_requests():
     model = SearchFirstPlanningModel(replies=[])
     agent = build_planning_agent(model)
     for _ in range(2):
-        context = tool_context()
+        context = tool_context(empty_searches=2)
         result = await agent.ainvoke(
             {"messages": [{"role": "user", "content": "规划订单"}]},
             context=context,
@@ -181,6 +206,7 @@ async def test_actual_agent_tools_runtime_and_structured_output():
         context.owner_id, context.project_id
     )
     assert model.calls == 2
+    assert model.bound_history[-1] == ["PlanProposalVO"]
 
 
 async def test_tool_transient_failure_retries_once_only():
@@ -247,7 +273,7 @@ async def test_final_stage_rejects_model_that_keeps_requesting_read_tools():
             config={"recursion_limit": PLAN_RECURSION_LIMIT},
         )
     assert error.value.code == "invalid_plan"
-    assert model.calls == 4
+    assert model.calls == 2
     assert (
         context.reader.read_task_board.await_count
         + context.reader.search_documents.await_count
@@ -270,9 +296,24 @@ async def test_tool_batch_over_hard_limit_is_rejected_before_execution():
     context.reader.read_task_board.assert_not_awaited()
 
 
+async def test_search_batch_cannot_exceed_document_budget_within_total_budget():
+    context = tool_context()
+    calls = [
+        tool_reply(number, include_board=False).tool_calls[0] for number in range(4)
+    ] + tool_reply().tool_calls[1:]
+    model = ScriptedPlanningModel(replies=[AIMessage(content="", tool_calls=calls)])
+    with pytest.raises(ToolCallLimitExceededError) as error:
+        await build_planning_agent(model).ainvoke(
+            {"messages": [{"role": "user", "content": "订单"}]}, context=context
+        )
+    assert error.value.run_count == 4 and error.value.run_limit == 3
+    context.reader.search_documents.assert_not_awaited()
+    context.reader.read_task_board.assert_not_awaited()
+
+
 async def test_five_reads_leave_one_call_for_structured_output():
     """四轮模型按 2、2、1 次读取及 1 次结果提交，恰好用完总预算。"""
-    context = tool_context()
+    context = tool_context(empty_searches=2)
     model = ScriptedPlanningModel(
         replies=[
             tool_reply(1),
@@ -294,7 +335,7 @@ async def test_five_reads_leave_one_call_for_structured_output():
 
 async def test_six_reads_exhaust_budget_before_structured_output():
     """模型次数仍在四次上限内，但结果提交是第七次工具调用，应被拒绝。"""
-    context = tool_context()
+    context = tool_context(empty_searches=2)
     model = ScriptedPlanningModel(
         replies=[tool_reply(1), tool_reply(2), tool_reply(3), final_reply()]
     )
@@ -378,7 +419,7 @@ async def test_last_normal_call_keeps_one_correction_and_shared_agent_resets_bud
     model = InvalidFinalSerialModel(replies=[])
     agent = build_planning_agent(model)
     for _ in range(2):
-        context = tool_context()
+        context = tool_context(empty_searches=2)
         result = await agent.ainvoke(
             {"messages": [{"role": "user", "content": "规划订单"}]},
             context=context,

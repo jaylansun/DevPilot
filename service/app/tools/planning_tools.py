@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from uuid import UUID
 
 from langchain.tools import ToolRuntime, tool
@@ -16,6 +16,14 @@ class PlanToolContext:
     project_id: UUID
     reader: PlanningReadService
     events: EventPublisher = NOOP_EVENTS
+    # 只保存代码定义的阶段和计时，不能放入目标、资料或模型输出。
+    diagnostics: dict[str, str | int | float] = field(
+        default_factory=lambda: {
+            "stage": "prepare_context",
+            "model_calls": 0,
+            "model_elapsed": 0.0,
+        }
+    )
 
 
 class _ReadToolInput(BaseModel):
